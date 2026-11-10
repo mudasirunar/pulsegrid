@@ -6,6 +6,9 @@ import 'core/database/app_database.dart';
 import 'core/database/local_data_source.dart';
 import 'core/network/network_info.dart';
 import 'core/theme/theme_cubit.dart';
+import 'features/auth/data/repositories/auth_repository_impl.dart';
+import 'features/auth/domain/repositories/auth_repository.dart';
+import 'features/auth/presentation/bloc/auth_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -28,5 +31,15 @@ Future<void> initInjection() async {
   // Theme Feature
   // -------------------------------------------------------------
   sl.registerFactory<ThemeCubit>(() => ThemeCubit(sl()));
+
+  // -------------------------------------------------------------
+  // Authentication & RBAC Feature
+  // -------------------------------------------------------------
+  sl.registerLazySingleton<AuthRepository>(
+    () => AuthRepositoryImpl(sharedPreferences: sl()),
+  );
+  sl.registerFactory<AuthBloc>(
+    () => AuthBloc(authRepository: sl()),
+  );
 }
 
