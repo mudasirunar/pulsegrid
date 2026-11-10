@@ -70,6 +70,12 @@ local.properties
 *.keystore
 *.key
 
+# Firebase Configuration
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+**/google-services.json
+**/GoogleService-Info.plist
+
 # Symbolication & Obfuscation
 app.*.symbols
 app.*.map.json

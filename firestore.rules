@@ -1,0 +1,97 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches Firebase Auth UID)
+    // Fields:
+    //   - id / uid: string - Unique user identifier
+    //   - email: string - User email
+    //   - displayName / name: string - Full name
+    //   - role: string - Coordinator | Responder | Viewer
+    //
+    // Collection: incidents
+    // Document ID: {incidentId}
+    // Fields:
+    //   - id: string - Incident UUID
+    //   - title: string - Incident title
+    //   - category: string - Medical, Fire, Infrastructure, Evacuation, Search & Rescue
+    //   - severity: string - Low, Medium, High, Critical
+    //   - description: string - Incident details
+    //   - status: string - New, Assigned, In Progress, Resolved, Closed
+    //   - version: int - Optimistic locking version
+    //   - latitude: float / number (optional)
+    //   - longitude: float / number (optional)
+    //   - manualLocationNotes: string (optional)
+    //   - photoPath: string (optional)
+    //   - createdBy: string - User UID who created the incident
+    //   - createdAt: string or timestamp
+    //   - updatedAt: string or timestamp
+    //
+    // Subcollections under incidents/{incidentId}:
+    //   - resource_logs/{logId}: Resource tracking logs
+    //   - activity_events/{eventId}: Incident audit/timeline events
+    //   - assignments/{assignmentId}: Incident responder assignments
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Returns true if the incoming request is from an authenticated user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Returns true if the authenticated user is accessing their own user document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // 1. Users Collection
+    // Strict privacy: A user can ONLY read and write their own profile document.
+    // Reading or modifying any other user's data is strictly forbidden.
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // 2. Incident Coordination Collections
+    // Authenticated responders, coordinators, and viewers can read and write incident records.
+    match /incidents/{incidentId} {
+      allow read, write: if isAuthenticated();
+
+      // Subcollection: Resource logs for an incident
+      match /resource_logs/{logId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcollection: Activity timeline events
+      match /activity_events/{eventId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      // Subcollection: Responder assignments
+      match /assignments/{assignmentId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // ===============================================================
+    // Default Deny Rule
+    // ===============================================================
+    // Any document or collection not explicitly matched above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
