@@ -1,4 +1,4 @@
-   import 'package:sqflite/sqflite.dart';
+import 'package:sqflite/sqflite.dart';
 import '../../features/incidents/data/models/activity_event_model.dart';
 import '../../features/incidents/data/models/assignment_model.dart';
 import '../../features/incidents/data/models/incident_model.dart';

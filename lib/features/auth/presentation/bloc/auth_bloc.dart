@@ -6,7 +6,10 @@ import 'auth_state.dart';
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository authRepository;
 
-  AuthBloc({required this.authRepository}) : super(const AuthInitial()) {
+  AuthBloc({
+    required this.authRepository,
+    AuthState initialState = const AuthInitial(),
+  }) : super(initialState) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<SignInWithRoleEvent>(_onSignInWithRole);
     on<SignInWithEmailPasswordEvent>(_onSignInWithEmailPassword);

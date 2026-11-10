@@ -1,33 +1,93 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pulsegrid/core/theme/theme_cubit.dart';
+import 'package:pulsegrid/features/auth/data/repositories/auth_repository_impl.dart';
+import 'package:pulsegrid/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:pulsegrid/features/auth/presentation/bloc/auth_state.dart';
 import 'package:pulsegrid/main.dart';
 
 void main() {
-  testWidgets('App smoke test renders Pulse Grid home screen and toggles theme',
-      (WidgetTester tester) async {
-    final themeCubit = ThemeCubit();
+  late SharedPreferences prefs;
+  late AuthRepositoryImpl authRepository;
+  late ThemeCubit themeCubit;
 
-    await tester.pumpWidget(
-      BlocProvider<ThemeCubit>.value(
-        value: themeCubit,
-        child: const PulseGridApp(),
-      ),
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
+    authRepository = AuthRepositoryImpl(sharedPreferences: prefs);
+    themeCubit = ThemeCubit(prefs);
+  });
+
+  tearDown(() {
+    themeCubit.close();
+  });
+
+  Widget createWidgetUnderTest(AuthBloc authBloc) {
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider<ThemeCubit>.value(value: themeCubit),
+        BlocProvider<AuthBloc>.value(value: authBloc),
+      ],
+      child: const PulseGridApp(),
+    );
+  }
+
+  testWidgets('Renders SignInScreen when unauthenticated and displays role toggle and form',
+      (WidgetTester tester) async {
+    final authBloc = AuthBloc(
+      authRepository: authRepository,
+      initialState: const Unauthenticated(),
     );
 
-    // Verify title and card text render
-    expect(find.text('Pulse Grid'), findsOneWidget);
-    expect(find.text('Offline-First Emergency Coordination'), findsOneWidget);
+    await tester.pumpWidget(createWidgetUnderTest(authBloc));
+    await tester.pump();
 
-    // Verify theme toggle button exists and can be tapped
-    final toggleButton = find.byType(IconButton);
-    expect(toggleButton, findsOneWidget);
+    expect(find.text('PULSE GRID'), findsOneWidget);
+    expect(find.text('SELECT OPERATIONAL ROLE'), findsOneWidget);
+    expect(find.text('Coordinator'), findsOneWidget);
+    expect(find.text('Responder'), findsOneWidget);
+    expect(find.text('Viewer'), findsOneWidget);
+    expect(find.text('Sign In'), findsOneWidget);
 
-    await tester.tap(toggleButton);
-    await tester.pumpAndSettle();
+    authBloc.close();
+  });
 
-    // Verify state transitioned
-    expect(themeCubit.state, isNot(ThemeMode.system));
+  testWidgets('Signing in as Coordinator displays coordinator permissions and capabilities',
+      (WidgetTester tester) async {
+    final authBloc = AuthBloc(
+      authRepository: authRepository,
+      initialState: const Authenticated(AuthRepositoryImpl.coordinatorDemo),
+    );
+
+    await tester.pumpWidget(createWidgetUnderTest(authBloc));
+    await tester.pump();
+
+    // Verify HomeScreen renders with coordinator role
+    expect(find.text('Pulse Grid Field Ops'), findsOneWidget);
+    expect(find.text('COORDINATOR'), findsOneWidget);
+    expect(find.text('Close Incident (Coordinator Permission)'), findsOneWidget);
+
+    authBloc.close();
+  });
+
+  testWidgets('Signing in as Viewer hides close and edit action buttons (Role Guarding)',
+      (WidgetTester tester) async {
+    final authBloc = AuthBloc(
+      authRepository: authRepository,
+      initialState: const Authenticated(AuthRepositoryImpl.viewerDemo),
+    );
+
+    await tester.pumpWidget(createWidgetUnderTest(authBloc));
+    await tester.pump();
+
+    expect(find.text('VIEWER'), findsOneWidget);
+    // RoleGuard should show restricted notice instead of action buttons
+    expect(find.text('Close Incident (Coordinator Permission)'), findsNothing);
+    expect(find.text('Log Resources & Update Status'), findsNothing);
+    expect(find.text('Viewers: All edit & resource logging actions disabled.'), findsOneWidget);
+
+    authBloc.close();
   });
 }
