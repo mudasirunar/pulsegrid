@@ -34,6 +34,10 @@ dependencies:
   # State Management & Immutability
   flutter_bloc: ^9.1.0
   equatable: ^2.0.7
+  get_it: ^8.0.3
+
+  # Network Monitoring
+  connectivity_plus: ^6.1.3
 
   # Local Key-Value Persistence (Preferences / Theme)
   shared_preferences: ^2.5.2
