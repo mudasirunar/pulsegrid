@@ -5,8 +5,12 @@ import 'database_constants.dart';
 class AppDatabase {
   sqflite.Database? _db;
   final sqflite.DatabaseFactory? databaseFactory;
+  final String databaseName;
 
-  AppDatabase({this.databaseFactory});
+  AppDatabase({
+    this.databaseFactory,
+    this.databaseName = DatabaseConstants.databaseName,
+  });
 
   /// Returns the active SQLite database instance, initializing if needed.
   Future<sqflite.Database> get database async {
@@ -19,8 +23,13 @@ class AppDatabase {
 
   Future<sqflite.Database> _initDatabase() async {
     final factory = databaseFactory ?? sqflite.databaseFactory;
-    final databasesPath = await factory.getDatabasesPath();
-    final path = join(databasesPath, DatabaseConstants.databaseName);
+    String path;
+    if (databaseName == sqflite.inMemoryDatabasePath) {
+      path = sqflite.inMemoryDatabasePath;
+    } else {
+      final databasesPath = await factory.getDatabasesPath();
+      path = join(databasesPath, databaseName);
+    }
 
     return await factory.openDatabase(
       path,

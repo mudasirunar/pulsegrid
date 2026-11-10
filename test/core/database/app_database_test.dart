@@ -12,14 +12,11 @@ void main() {
   late Database db;
 
   setUp(() async {
-    appDatabase = AppDatabase(databaseFactory: databaseFactoryFfi);
-    db = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: DatabaseConstants.databaseVersion,
-        onCreate: AppDatabase.createTables,
-      ),
+    appDatabase = AppDatabase(
+      databaseFactory: databaseFactoryFfi,
+      databaseName: inMemoryDatabasePath,
     );
+    db = await appDatabase.database;
   });
 
   tearDown(() async {

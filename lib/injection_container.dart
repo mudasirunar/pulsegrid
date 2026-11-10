@@ -3,6 +3,7 @@ import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/database/app_database.dart';
+import 'core/database/local_data_source.dart';
 import 'core/network/network_info.dart';
 import 'core/theme/theme_cubit.dart';
 
@@ -16,6 +17,7 @@ Future<void> initInjection() async {
   sl.registerLazySingleton<SharedPreferences>(() => sharedPreferences);
   sl.registerLazySingleton<Connectivity>(() => Connectivity());
   sl.registerLazySingleton<AppDatabase>(() => AppDatabase());
+  sl.registerLazySingleton<LocalDataSource>(() => LocalDataSourceImpl(sl()));
 
   // -------------------------------------------------------------
   // Core Infrastructure
