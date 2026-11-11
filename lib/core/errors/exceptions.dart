@@ -40,3 +40,11 @@ class ConflictException extends AppException {
   }) : super(message, 'VERSION_CONFLICT');
 }
 
+class InvalidStateTransitionException extends AppException {
+  const InvalidStateTransitionException(super.message, [super.code]);
+}
+
+class PermissionDeniedException extends AppException {
+  const PermissionDeniedException(super.message, [super.code]);
+}
+

@@ -21,6 +21,8 @@ enum UserRole {
   bool get canUpdateAssignedAndLogResources =>
       this == UserRole.coordinator || this == UserRole.responder;
 
+  bool get canUpdateIncidents => canUpdateAssignedAndLogResources;
+
   /// Viewers have strictly read-only access
   bool get isReadOnly => this == UserRole.viewer;
 

@@ -45,3 +45,11 @@ class ConflictFailure extends Failure {
   List<Object?> get props => [message, code, localData, serverData];
 }
 
+class InvalidStateTransitionFailure extends Failure {
+  const InvalidStateTransitionFailure(super.message, [super.code]);
+}
+
+class PermissionDeniedFailure extends Failure {
+  const PermissionDeniedFailure(super.message, [super.code]);
+}
+
