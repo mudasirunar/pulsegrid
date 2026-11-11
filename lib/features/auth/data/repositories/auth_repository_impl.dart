@@ -95,47 +95,39 @@ class AuthRepositoryImpl implements AuthRepository {
     final auth = firebaseAuth ?? FirebaseAuth.instance;
     final db = firestore ?? FirebaseFirestore.instance;
 
-    UserCredential? credential;
+    UserCredential credential;
 
     try {
-      // 1. Attempt to sign in to real Firebase Auth
+      // 1. Authenticate with Firebase Auth (Strict Sign In only - no account creation)
       credential = await auth.signInWithEmailAndPassword(
         email: cleanEmail,
         password: cleanPassword,
       );
     } on FirebaseAuthException catch (e) {
-      // 2. If user does not exist in the new Firebase project, automatically seed/create them!
-      if (e.code == 'user-not-found' || e.code == 'invalid-credential' || e.code == 'channel-error') {
-        try {
-          credential = await auth.createUserWithEmailAndPassword(
-            email: cleanEmail,
-            password: cleanPassword,
-          );
-        } on FirebaseAuthException catch (createError) {
-          if (createError.code == 'email-already-in-use') {
-            throw const AuthException('Incorrect password for this account.');
-          }
-          throw AuthException(createError.message ?? 'Authentication failed.');
-        } catch (err) {
-          throw AuthException(err.toString());
-        }
-      } else {
-        throw AuthException(e.message ?? 'Authentication failed.');
+      if (e.code == 'user-not-found' || e.code == 'invalid-credential' || e.code == 'wrong-password') {
+        throw const AuthException('Invalid email or password.');
+      } else if (e.code == 'user-disabled') {
+        throw const AuthException('This account has been disabled.');
       }
+      throw AuthException(e.message ?? 'Authentication failed.');
     } catch (e) {
       // If network fails in offline/airplane mode, fallback to cached session if available
       final cached = await getCurrentUser();
       if (cached != null && cached.email.toLowerCase() == cleanEmail) {
         return cached;
       }
-      throw AuthException(e.toString());
+      throw AuthException('Network error: unable to sign in offline without an active session.');
     }
 
-    final uid = credential.user?.uid ?? 'user-${cleanEmail.replaceAll('@', '-').replaceAll('.', '-')}';
+    final userObj = credential.user;
+    if (userObj == null) {
+      throw const AuthException('Sign in failed: no user returned from Firebase Auth.');
+    }
+    final uid = userObj.uid;
 
-    // 3. Fetch user profile from Cloud Firestore (/users/{uid}) as primary source of truth
-    String resolvedDisplayName = displayName;
-    UserRole resolvedRole = role;
+    // 2. Fetch user profile from Cloud Firestore (/users/{uid}) as primary source of truth
+    String resolvedDisplayName = userObj.displayName ?? cleanEmail.split('@').first;
+    UserRole resolvedRole = UserRole.viewer;
 
     try {
       final userDoc = db.collection('users').doc(uid);
@@ -148,17 +140,13 @@ class AuthRepositoryImpl implements AuthRepository {
         if (data['role'] != null) {
           resolvedRole = UserRole.fromString(data['role'] as String);
         }
-      } else {
-        await userDoc.set({
-          'id': uid,
-          'email': cleanEmail,
-          'displayName': displayName,
-          'role': role.name,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
       }
     } catch (_) {
-      // Silently ignore Firestore write failures if offline
+      // If offline after initial auth, fall back to cached session
+      final cached = await getCurrentUser();
+      if (cached != null && cached.id == uid) {
+        return cached;
+      }
     }
 
     final user = UserModel(
