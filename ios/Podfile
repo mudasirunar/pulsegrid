@@ -49,6 +49,14 @@ post_install do |installer|
         # Faster incremental Swift compile times
         config.build_settings['SWIFT_COMPILATION_MODE'] = 'singlefile'
       end
+
+      # permission_handler preprocessor macros
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_CAMERA=1',
+        'PERMISSION_PHOTOS=1',
+        'PERMISSION_LOCATION=1',
+      ]
     end
   end
 end

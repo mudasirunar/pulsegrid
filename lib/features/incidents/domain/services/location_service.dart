@@ -2,30 +2,78 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
+
+enum LocationPermissionStatus {
+  granted,
+  denied,
+  permanentlyDenied,
+}
 
 abstract class LocationService {
   Future<({double latitude, double longitude})?> getCurrentLocation();
   Future<String?> reverseGeocode({required double latitude, required double longitude});
   Future<bool> checkPermission();
   Future<bool> requestPermission();
+  Future<LocationPermissionStatus> checkPermissionStatus();
+  Future<LocationPermissionStatus> requestPermissionStatus();
+  Future<bool> shouldShowLocationRationale();
+  Future<bool> openAppSettings();
 }
 
 class LocationServiceImpl implements LocationService {
   @override
   Future<bool> checkPermission() async {
-    final permission = await Geolocator.checkPermission();
-    return permission == LocationPermission.always ||
-        permission == LocationPermission.whileInUse;
+    final status = await checkPermissionStatus();
+    return status == LocationPermissionStatus.granted;
   }
 
   @override
   Future<bool> requestPermission() async {
+    final status = await requestPermissionStatus();
+    return status == LocationPermissionStatus.granted;
+  }
+
+  @override
+  Future<LocationPermissionStatus> checkPermissionStatus() async {
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse) {
+      return LocationPermissionStatus.granted;
+    } else if (permission == LocationPermission.deniedForever) {
+      return LocationPermissionStatus.permanentlyDenied;
+    } else {
+      return LocationPermissionStatus.denied;
+    }
+  }
+
+  @override
+  Future<LocationPermissionStatus> requestPermissionStatus() async {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-    return permission == LocationPermission.always ||
-        permission == LocationPermission.whileInUse;
+    if (permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse) {
+      return LocationPermissionStatus.granted;
+    } else if (permission == LocationPermission.deniedForever) {
+      return LocationPermissionStatus.permanentlyDenied;
+    } else {
+      return LocationPermissionStatus.denied;
+    }
+  }
+
+  @override
+  Future<bool> shouldShowLocationRationale() async {
+    if (Platform.isAndroid) {
+      return await ph.Permission.locationWhenInUse.shouldShowRequestRationale;
+    }
+    return false;
+  }
+
+  @override
+  Future<bool> openAppSettings() async {
+    return await Geolocator.openAppSettings();
   }
 
   @override

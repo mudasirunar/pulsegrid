@@ -18,7 +18,14 @@ import 'package:pulsegrid/features/incidents/presentation/screens/create_inciden
 class _FakeLocationService implements LocationService {
   final ({double latitude, double longitude})? coords;
   final String? address;
-  _FakeLocationService([this.coords, this.address]);
+  LocationPermissionStatus permissionStatus;
+  bool settingsOpened = false;
+
+  _FakeLocationService([
+    this.coords,
+    this.address,
+    this.permissionStatus = LocationPermissionStatus.granted,
+  ]);
 
   @override
   Future<({double latitude, double longitude})?> getCurrentLocation() async => coords;
@@ -30,10 +37,31 @@ class _FakeLocationService implements LocationService {
   }) async => address;
 
   @override
-  Future<bool> checkPermission() async => true;
+  Future<bool> checkPermission() async =>
+      permissionStatus == LocationPermissionStatus.granted;
 
   @override
-  Future<bool> requestPermission() async => true;
+  Future<bool> requestPermission() async =>
+      permissionStatus == LocationPermissionStatus.granted;
+
+  @override
+  Future<LocationPermissionStatus> checkPermissionStatus() async =>
+      permissionStatus;
+
+  @override
+  Future<LocationPermissionStatus> requestPermissionStatus() async =>
+      permissionStatus;
+
+  bool locationRationale = false;
+
+  @override
+  Future<bool> shouldShowLocationRationale() async => locationRationale;
+
+  @override
+  Future<bool> openAppSettings() async {
+    settingsOpened = true;
+    return true;
+  }
 }
 
 class _FakeNetworkInfo implements NetworkInfo {
@@ -50,12 +78,48 @@ class _FakeNetworkInfo implements NetworkInfo {
 class _FakeMediaService implements MediaService {
   final List<String> cameraReturnPaths;
   final List<String> galleryReturnPaths;
+  MediaPermissionStatus cameraPermission;
+  MediaPermissionStatus galleryPermission;
+  bool settingsOpened = false;
   int _cameraIndex = 0;
 
   _FakeMediaService({
     this.cameraReturnPaths = const [],
     this.galleryReturnPaths = const [],
+    this.cameraPermission = MediaPermissionStatus.granted,
+    this.galleryPermission = MediaPermissionStatus.granted,
   });
+
+  @override
+  Future<MediaPermissionStatus> checkCameraPermission() async =>
+      cameraPermission;
+
+  @override
+  Future<MediaPermissionStatus> requestCameraPermission() async =>
+      cameraPermission;
+
+  @override
+  Future<MediaPermissionStatus> checkGalleryPermission() async =>
+      galleryPermission;
+
+  @override
+  Future<MediaPermissionStatus> requestGalleryPermission() async =>
+      galleryPermission;
+
+  bool cameraRationale = false;
+  bool galleryRationale = false;
+
+  @override
+  Future<bool> shouldShowCameraRationale() async => cameraRationale;
+
+  @override
+  Future<bool> shouldShowGalleryRationale() async => galleryRationale;
+
+  @override
+  Future<bool> openAppSettings() async {
+    settingsOpened = true;
+    return true;
+  }
 
   @override
   Future<String?> pickImageFromCamera() async {
@@ -369,5 +433,297 @@ void main() {
 
     expect(repository.lastCreated, isNotNull);
     expect(repository.lastCreated!.photoPaths.length, 5);
+  });
+
+  testWidgets(
+      'Camera permission: when permanently denied, shows dialog directing to App Settings',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final mediaService = _FakeMediaService(
+      cameraPermission: CameraPermissionStatus.permanentlyDenied,
+    );
+
+    await tester.pumpWidget(buildScreen(mediaService: mediaService));
+    await tester.pumpAndSettle();
+
+    // Tap "Camera"
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Camera'));
+    await tester.pumpAndSettle();
+
+    // Dialog shown
+    expect(find.text('Camera Permission'), findsOneWidget);
+    expect(
+      find.text(
+          'Camera access was denied. PulseGrid needs camera permission to capture live incident photos. Please enable it in App Settings.'),
+      findsOneWidget,
+    );
+    expect(find.text('Open Settings'), findsOneWidget);
+
+    // Tap "Open Settings"
+    await tester.tap(find.text('Open Settings'));
+    await tester.pumpAndSettle();
+
+    expect(mediaService.settingsOpened, isTrue);
+    expect(find.text('Camera Permission'), findsNothing);
+  });
+
+  testWidgets(
+      'Camera permission: when denied once, asks again and opens camera when granted',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final mediaService = _FakeMediaService(
+      cameraPermission: CameraPermissionStatus.denied,
+      cameraReturnPaths: ['/tmp/allowed_camera.jpg'],
+    );
+
+    await tester.pumpWidget(buildScreen(mediaService: mediaService));
+    await tester.pumpAndSettle();
+
+    // First click: user denies it in OS dialog
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Camera'));
+    await tester.pumpAndSettle();
+
+    // Dialog is NOT shown right after first denial; warning SnackBar is shown
+    expect(find.text('Camera Permission'), findsNothing);
+    expect(
+        find.text('Camera permission is required to capture evidence photos.'),
+        findsOneWidget);
+
+    // On next click user grants it
+    mediaService.cameraPermission = CameraPermissionStatus.granted;
+
+    // Tap "Camera" again
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Camera'));
+    await tester.pumpAndSettle();
+
+    // Photo captured successfully
+    expect(find.text('Evidence Photos (1/5)'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Gallery permission: when permanently denied, shows dialog directing to App Settings',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final mediaService = _FakeMediaService(
+      galleryPermission: MediaPermissionStatus.permanentlyDenied,
+    );
+
+    await tester.pumpWidget(buildScreen(mediaService: mediaService));
+    await tester.pumpAndSettle();
+
+    // Tap "Gallery"
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Gallery'));
+    await tester.pumpAndSettle();
+
+    // Dialog shown
+    expect(find.text('Photo Library Permission'), findsOneWidget);
+    expect(
+      find.text(
+          'Photo Library access was denied. PulseGrid needs photo library permission to select incident photos. Please enable it in App Settings.'),
+      findsOneWidget,
+    );
+    expect(find.text('Open Settings'), findsOneWidget);
+
+    // Tap "Open Settings"
+    await tester.tap(find.text('Open Settings'));
+    await tester.pumpAndSettle();
+
+    expect(mediaService.settingsOpened, isTrue);
+    expect(find.text('Photo Library Permission'), findsNothing);
+  });
+
+  testWidgets(
+      'Gallery permission: when denied once, asks again and picks photos when granted',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final mediaService = _FakeMediaService(
+      galleryPermission: MediaPermissionStatus.denied,
+      galleryReturnPaths: ['/tmp/allowed_gallery1.jpg', '/tmp/allowed_gallery2.jpg'],
+    );
+
+    await tester.pumpWidget(buildScreen(mediaService: mediaService));
+    await tester.pumpAndSettle();
+
+    // First click: user denies it in OS dialog
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Gallery'));
+    await tester.pumpAndSettle();
+
+    // Dialog is NOT shown right after first denial; warning SnackBar is shown
+    expect(find.text('Photo Library Permission'), findsNothing);
+    expect(
+        find.text('Photo library permission is required to attach images.'),
+        findsOneWidget);
+
+    // On next click user grants it
+    mediaService.galleryPermission = MediaPermissionStatus.granted;
+
+    // Tap "Gallery" again
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Gallery'));
+    await tester.pumpAndSettle();
+
+    // Photos selected successfully
+    expect(find.text('Evidence Photos (2/5)'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Location permission: when permanently denied, shows dialog directing to App Settings',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final locationService = _FakeLocationService(
+      null,
+      null,
+      LocationPermissionStatus.permanentlyDenied,
+    );
+
+    await tester.pumpWidget(buildScreen(locationService: locationService));
+    await tester.pumpAndSettle();
+
+    // Tap GPS button
+    await tester.tap(find.byIcon(Icons.my_location_rounded));
+    await tester.pumpAndSettle();
+
+    // Dialog shown
+    expect(find.text('Location Permission'), findsOneWidget);
+    expect(
+      find.text(
+          'Location access was denied. PulseGrid needs location permission to attach GPS coordinates to emergency incident reports. Please enable it in App Settings.'),
+      findsOneWidget,
+    );
+    expect(find.text('Open Settings'), findsOneWidget);
+
+    // Tap "Open Settings"
+    await tester.tap(find.text('Open Settings'));
+    await tester.pumpAndSettle();
+
+    expect(locationService.settingsOpened, isTrue);
+    expect(find.text('Location Permission'), findsNothing);
+  });
+
+  testWidgets(
+      'Location permission: when denied once, asks again and captures GPS when granted',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final locationService = _FakeLocationService(
+      (latitude: 37.7749, longitude: -122.4194),
+      'San Francisco, CA',
+      LocationPermissionStatus.denied,
+    );
+
+    await tester.pumpWidget(buildScreen(locationService: locationService));
+    await tester.pumpAndSettle();
+
+    // First click: user denies it in OS dialog
+    await tester.tap(find.byIcon(Icons.my_location_rounded));
+    await tester.pumpAndSettle();
+
+    // Dialog is NOT shown right after first denial; warning SnackBar is shown
+    expect(find.text('Location Permission'), findsNothing);
+    expect(
+        find.text('Location permission is required to capture GPS coordinates.'),
+        findsOneWidget);
+
+    // On next click user grants it
+    locationService.permissionStatus = LocationPermissionStatus.granted;
+
+    // Tap GPS button again
+    await tester.tap(find.byIcon(Icons.my_location_rounded));
+    await tester.pumpAndSettle();
+
+    // GPS captured successfully
+    expect(find.textContaining('37.77490° N'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Camera permission UX: first denial shows SnackBar, subsequent click shows AppDialog',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final mediaService = _FakeMediaService(
+      cameraPermission: CameraPermissionStatus.denied,
+    );
+
+    await tester.pumpWidget(buildScreen(mediaService: mediaService));
+    await tester.pumpAndSettle();
+
+    // 1st click: user denies in OS prompt
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Camera'));
+    await tester.pumpAndSettle();
+
+    // Polite SnackBar shown, NO dialog
+    expect(find.text('Camera Permission'), findsNothing);
+    expect(
+      find.text('Camera permission is required to capture evidence photos.'),
+      findsOneWidget,
+    );
+
+    // Permission is now permanently denied
+    mediaService.cameraPermission = CameraPermissionStatus.permanentlyDenied;
+
+    // 2nd click: user clicks button again
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Camera'));
+    await tester.pumpAndSettle();
+
+    // AppDialog is now shown offering to Open Settings
+    expect(find.text('Camera Permission'), findsOneWidget);
+    expect(find.text('Open Settings'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Location permission UX: first denial shows SnackBar, subsequent click shows AppDialog',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final locationService = _FakeLocationService(
+      null,
+      null,
+      LocationPermissionStatus.denied,
+    );
+
+    await tester.pumpWidget(buildScreen(locationService: locationService));
+    await tester.pumpAndSettle();
+
+    // 1st click: user denies in OS prompt
+    await tester.tap(find.byIcon(Icons.my_location_rounded));
+    await tester.pumpAndSettle();
+
+    // Polite SnackBar shown, NO dialog
+    expect(find.text('Location Permission'), findsNothing);
+    expect(
+      find.text('Location permission is required to capture GPS coordinates.'),
+      findsOneWidget,
+    );
+
+    // Permission is now permanently denied
+    locationService.permissionStatus = LocationPermissionStatus.permanentlyDenied;
+
+    // 2nd click: user clicks button again
+    await tester.tap(find.byIcon(Icons.my_location_rounded));
+    await tester.pumpAndSettle();
+
+    // AppDialog is now shown offering to Open Settings
+    expect(find.text('Location Permission'), findsOneWidget);
+    expect(find.text('Open Settings'), findsOneWidget);
   });
 }

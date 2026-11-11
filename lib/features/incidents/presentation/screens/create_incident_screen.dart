@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/network/network_info.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_button.dart';
+import '../../../../core/widgets/app_dialog.dart';
 import '../../../../core/widgets/app_snackbar.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../injection_container.dart';
@@ -111,6 +112,52 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
       _detectedAddress = null;
     });
 
+    final canShowRationaleBefore =
+        await _locationService.shouldShowLocationRationale();
+    if (!mounted) return;
+
+    final currentStatus = await _locationService.checkPermissionStatus();
+    if (!mounted) return;
+
+    if (currentStatus == LocationPermissionStatus.permanentlyDenied) {
+      setState(() => _isCapturingLocation = false);
+      _showPermissionDialog(
+        title: 'Location Permission',
+        message:
+            'Location access was denied. PulseGrid needs location permission to attach GPS coordinates to emergency incident reports. Please enable it in App Settings.',
+        icon: Icons.location_on_outlined,
+        onOpenSettings: () => _locationService.openAppSettings(),
+      );
+      return;
+    }
+
+    final permStatus = await _locationService.requestPermissionStatus();
+    if (!mounted) return;
+
+    if (permStatus == LocationPermissionStatus.granted) {
+      // Proceed to coords lock below
+    } else if (Platform.isAndroid &&
+        permStatus == LocationPermissionStatus.permanentlyDenied &&
+        !canShowRationaleBefore) {
+      setState(() => _isCapturingLocation = false);
+      _showPermissionDialog(
+        title: 'Location Permission',
+        message:
+            'Location access was denied. PulseGrid needs location permission to attach GPS coordinates to emergency incident reports. Please enable it in App Settings.',
+        icon: Icons.location_on_outlined,
+        onOpenSettings: () => _locationService.openAppSettings(),
+      );
+      return;
+    } else {
+      setState(() => _isCapturingLocation = false);
+      AppSnackBar.showWarning(
+        context,
+        'Location permission is required to capture GPS coordinates.',
+        title: 'Permission Denied',
+      );
+      return;
+    }
+
     final coords = await _locationService.getCurrentLocation();
     if (!mounted) return;
 
@@ -191,27 +238,118 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
     }
 
     if (fromCamera) {
-      final path = await _mediaService.pickImageFromCamera();
+      final canShowRationaleBefore =
+          await _mediaService.shouldShowCameraRationale();
       if (!mounted) return;
-      if (path != null) {
-        setState(() => _photoPaths.add(path));
+
+      final currentStatus = await _mediaService.checkCameraPermission();
+      if (!mounted) return;
+
+      if (currentStatus == MediaPermissionStatus.permanentlyDenied) {
+        _showPermissionDialog(
+          title: 'Camera Permission',
+          message:
+              'Camera access was denied. PulseGrid needs camera permission to capture live incident photos. Please enable it in App Settings.',
+          icon: Icons.camera_alt_outlined,
+        );
+        return;
+      }
+
+      final status = await _mediaService.requestCameraPermission();
+      if (!mounted) return;
+
+      if (status == MediaPermissionStatus.granted) {
+        final path = await _mediaService.pickImageFromCamera();
+        if (!mounted) return;
+        if (path != null) {
+          setState(() => _photoPaths.add(path));
+        }
+      } else if (Platform.isAndroid &&
+          status == MediaPermissionStatus.permanentlyDenied &&
+          !canShowRationaleBefore) {
+        _showPermissionDialog(
+          title: 'Camera Permission',
+          message:
+              'Camera access was denied. PulseGrid needs camera permission to capture live incident photos. Please enable it in App Settings.',
+          icon: Icons.camera_alt_outlined,
+        );
+      } else {
+        AppSnackBar.showWarning(
+          context,
+          'Camera permission is required to capture evidence photos.',
+          title: 'Permission Denied',
+        );
       }
     } else {
-      final remaining = maxPhotos - _photoPaths.length;
-      final picked = await _mediaService.pickMultipleImagesFromGallery(
-        maxImages: remaining,
-      );
+      final canShowRationaleBefore =
+          await _mediaService.shouldShowGalleryRationale();
       if (!mounted) return;
-      if (picked.isNotEmpty) {
-        setState(() {
-          for (final p in picked) {
-            if (_photoPaths.length < maxPhotos && !_photoPaths.contains(p)) {
-              _photoPaths.add(p);
+
+      final currentStatus = await _mediaService.checkGalleryPermission();
+      if (!mounted) return;
+
+      if (currentStatus == MediaPermissionStatus.permanentlyDenied) {
+        _showPermissionDialog(
+          title: 'Photo Library Permission',
+          message:
+              'Photo Library access was denied. PulseGrid needs photo library permission to select incident photos. Please enable it in App Settings.',
+          icon: Icons.photo_library_outlined,
+        );
+        return;
+      }
+
+      final status = await _mediaService.requestGalleryPermission();
+      if (!mounted) return;
+
+      if (status == MediaPermissionStatus.granted) {
+        final remaining = maxPhotos - _photoPaths.length;
+        final picked = await _mediaService.pickMultipleImagesFromGallery(
+          maxImages: remaining,
+        );
+        if (!mounted) return;
+        if (picked.isNotEmpty) {
+          setState(() {
+            for (final p in picked) {
+              if (_photoPaths.length < maxPhotos && !_photoPaths.contains(p)) {
+                _photoPaths.add(p);
+              }
             }
-          }
-        });
+          });
+        }
+      } else if (Platform.isAndroid &&
+          status == MediaPermissionStatus.permanentlyDenied &&
+          !canShowRationaleBefore) {
+        _showPermissionDialog(
+          title: 'Photo Library Permission',
+          message:
+              'Photo Library access was denied. PulseGrid needs photo library permission to select incident photos. Please enable it in App Settings.',
+          icon: Icons.photo_library_outlined,
+        );
+      } else {
+        AppSnackBar.showWarning(
+          context,
+          'Photo library permission is required to attach images.',
+          title: 'Permission Denied',
+        );
       }
     }
+  }
+
+  void _showPermissionDialog({
+    required String title,
+    required String message,
+    required IconData icon,
+    VoidCallback? onOpenSettings,
+  }) {
+    AppDialog.show<void>(
+      context: context,
+      title: title,
+      message: message,
+      icon: icon,
+      cancelText: 'Cancel',
+      confirmText: 'Open Settings',
+      onConfirm: onOpenSettings ?? () => _mediaService.openAppSettings(),
+    );
   }
 
   void _removePhotoAt(int index) {
