@@ -47,9 +47,9 @@ class PulseGridApp extends StatelessWidget {
               if (state is Authenticated) {
                 return HomeScreen(user: state.user);
               }
-              if (state is AuthLoading) {
+              if (state is AuthInitial) {
                 return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
+                  body: SizedBox.shrink(),
                 );
               }
               return const SignInScreen();

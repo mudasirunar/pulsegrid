@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_button.dart';
+import '../../../../core/widgets/app_snackbar.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/entities/user_role.dart';
@@ -21,10 +22,11 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen> {
   final _emailController = TextEditingController(text: AuthRepositoryImpl.coordinatorEmail);
   final _passwordController = TextEditingController(text: AuthRepositoryImpl.defaultPassword);
-  final _formKey = GlobalKey<FormState>();
 
   UserRole _selectedRole = UserRole.coordinator;
   bool _obscurePassword = true;
+  String? _emailError;
+  String? _passwordError;
 
   @override
   void dispose() {
@@ -33,9 +35,16 @@ class _SignInScreenState extends State<SignInScreen> {
     super.dispose();
   }
 
-  void _onRoleSelected(UserRole role) {
+  bool _isValidEmail(String email) {
+    return RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(email);
+  }
+
+  void _onRoleSelected(UserRole role, bool isLoading) {
+    if (isLoading) return;
     setState(() {
       _selectedRole = role;
+      _emailError = null;
+      _passwordError = null;
       switch (role) {
         case UserRole.coordinator:
           _emailController.text = AuthRepositoryImpl.coordinatorEmail;
@@ -52,11 +61,34 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   void _onSignIn() {
-    if (_formKey.currentState?.validate() ?? false) {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    String? emailErr;
+    String? passErr;
+
+    if (email.isEmpty) {
+      emailErr = 'Email is required';
+    } else if (!_isValidEmail(email)) {
+      emailErr = 'Please enter a valid email address';
+    }
+
+    if (password.isEmpty) {
+      passErr = 'Password is required';
+    } else if (password.length < 6) {
+      passErr = 'Password must be at least 6 characters';
+    }
+
+    setState(() {
+      _emailError = emailErr;
+      _passwordError = passErr;
+    });
+
+    if (emailErr == null && passErr == null) {
       context.read<AuthBloc>().add(
             SignInWithEmailPasswordEvent(
-              email: _emailController.text,
-              password: _passwordController.text,
+              email: email,
+              password: password,
             ),
           );
     }
@@ -71,12 +103,9 @@ class _SignInScreenState extends State<SignInScreen> {
       body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: AppColors.severityCritical,
-                behavior: SnackBarBehavior.floating,
-              ),
+            AppSnackBar.showError(
+              context,
+              state.message,
             );
           }
         },
@@ -114,7 +143,13 @@ class _SignInScreenState extends State<SignInScreen> {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          _buildHorizontalRoleToggle(context, isDark),
+                          AbsorbPointer(
+                            absorbing: isLoading,
+                            child: Opacity(
+                              opacity: isLoading ? 0.6 : 1.0,
+                              child: _buildHorizontalRoleToggle(context, isDark, isLoading),
+                            ),
+                          ),
                           const SizedBox(height: 8),
 
                           // Role description caption with fixed height to prevent layout jump
@@ -136,65 +171,67 @@ class _SignInScreenState extends State<SignInScreen> {
                           const SizedBox(height: 20),
 
                           // Form
-                          Form(
-                            key: _formKey,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                AppTextField(
-                                  controller: _emailController,
-                                  label: 'Email',
-                                  hintText: 'name@pulsegrid.org',
-                                  prefixIcon: const Icon(Icons.mail_outline_rounded, size: 20),
-                                  keyboardType: TextInputType.emailAddress,
-                                  textInputAction: TextInputAction.next,
-                                  borderRadius: 24.0,
-                                  validator: (val) {
-                                    if (val == null || val.trim().isEmpty) {
-                                      return 'Email is required';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 16),
-                                AppTextField(
-                                  controller: _passwordController,
-                                  label: 'Password',
-                                  hintText: '••••••••',
-                                  obscureText: _obscurePassword,
-                                  prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility_outlined
-                                          : Icons.visibility_off_outlined,
-                                      size: 20,
-                                    ),
-                                    onPressed: () {
-                                      setState(() => _obscurePassword = !_obscurePassword);
-                                    },
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              AppTextField(
+                                controller: _emailController,
+                                label: 'Email',
+                                hintText: 'name@pulsegrid.org',
+                                prefixIcon: const Icon(Icons.mail_outline_rounded, size: 20),
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                                borderRadius: 24.0,
+                                enabled: !isLoading,
+                                errorText: _emailError,
+                                onChanged: (val) {
+                                  if (_emailError != null) {
+                                    setState(() => _emailError = null);
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              AppTextField(
+                                controller: _passwordController,
+                                label: 'Password',
+                                hintText: '••••••••',
+                                obscureText: _obscurePassword,
+                                prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    size: 20,
                                   ),
-                                  textInputAction: TextInputAction.done,
-                                  onEditingComplete: _onSignIn,
-                                  borderRadius: 24.0,
-                                  validator: (val) {
-                                    if (val == null || val.trim().isEmpty) {
-                                      return 'Password is required';
-                                    }
-                                    return null;
-                                  },
+                                  onPressed: isLoading
+                                      ? null
+                                      : () {
+                                          setState(() => _obscurePassword = !_obscurePassword);
+                                        },
                                 ),
-                                const SizedBox(height: 24),
-                                AppButton(
-                                  text: 'Sign In',
-                                  isLoading: isLoading,
-                                  borderRadius: 24.0,
-                                  height: 50.0,
-                                  customForegroundColor: Colors.white,
-                                  onPressed: isLoading ? null : _onSignIn,
-                                ),
-                              ],
-                            ),
+                                textInputAction: TextInputAction.done,
+                                onEditingComplete: isLoading ? null : _onSignIn,
+                                borderRadius: 24.0,
+                                enabled: !isLoading,
+                                errorText: _passwordError,
+                                onChanged: (val) {
+                                  if (_passwordError != null) {
+                                    setState(() => _passwordError = null);
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 24),
+                              AppButton(
+                                text: 'Sign In',
+                                isLoading: isLoading,
+                                isDisabled: isLoading,
+                                borderRadius: 24.0,
+                                height: 50.0,
+                                customForegroundColor: Colors.white,
+                                onPressed: isLoading ? null : _onSignIn,
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 32),
                         ],
@@ -210,7 +247,7 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
-  Widget _buildHorizontalRoleToggle(BuildContext context, bool isDark) {
+  Widget _buildHorizontalRoleToggle(BuildContext context, bool isDark, bool isLoading) {
     final theme = Theme.of(context);
     final bgColor = isDark
         ? AppColors.surfaceDark
@@ -233,7 +270,7 @@ class _SignInScreenState extends State<SignInScreen> {
           return Expanded(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => _onRoleSelected(role),
+              onTap: isLoading ? null : () => _onRoleSelected(role, isLoading),
               child: Container(
                 height: 40,
                 decoration: BoxDecoration(
