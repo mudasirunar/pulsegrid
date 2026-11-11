@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/network/network_info.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_snackbar.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../../injection_container.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../domain/entities/incident_severity.dart';
 import '../../domain/services/location_service.dart';
@@ -19,21 +22,32 @@ class CreateIncidentScreen extends StatefulWidget {
   final UserEntity currentUser;
   final LocationService? locationService;
   final MediaService? mediaService;
+  final NetworkInfo? networkInfo;
 
   const CreateIncidentScreen({
     super.key,
     required this.currentUser,
     this.locationService,
     this.mediaService,
+    this.networkInfo,
   });
 
   @override
   State<CreateIncidentScreen> createState() => _CreateIncidentScreenState();
 }
 
+class _FallbackNetworkInfo implements NetworkInfo {
+  @override
+  Future<bool> get isConnected async => true;
+
+  @override
+  Stream<bool> get onConnectivityChanged => Stream.value(true);
+}
+
 class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
   late final LocationService _locationService;
   late final MediaService _mediaService;
+  late final NetworkInfo _networkInfo;
 
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -46,6 +60,10 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
   double? _latitude;
   double? _longitude;
   bool _isCapturingLocation = false;
+  bool _isResolvingAddress = false;
+  String? _detectedAddress;
+  bool _showAddressSuggestion = false;
+  Timer? _detectingTimer;
   final List<String> _photoPaths = [];
   static const int maxPhotos = 5;
 
@@ -68,10 +86,15 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
     super.initState();
     _locationService = widget.locationService ?? LocationServiceImpl();
     _mediaService = widget.mediaService ?? MediaServiceImpl();
+    _networkInfo = widget.networkInfo ??
+        (sl.isRegistered<NetworkInfo>()
+            ? sl<NetworkInfo>()
+            : _FallbackNetworkInfo());
   }
 
   @override
   void dispose() {
+    _detectingTimer?.cancel();
     _titleController.dispose();
     _descriptionController.dispose();
     _locationNotesController.dispose();
@@ -80,34 +103,78 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
   }
 
   Future<void> _captureLocation() async {
-    setState(() => _isCapturingLocation = true);
+    _detectingTimer?.cancel();
+    setState(() {
+      _isCapturingLocation = true;
+      _isResolvingAddress = false;
+      _showAddressSuggestion = false;
+      _detectedAddress = null;
+    });
+
     final coords = await _locationService.getCurrentLocation();
     if (!mounted) return;
 
-    String? address;
     if (coords != null) {
-      address = await _locationService.reverseGeocode(
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-      );
-      if (!mounted) return;
-    }
-
-    setState(() {
-      _isCapturingLocation = false;
-      if (coords != null) {
+      // Phase 1: INSTANT SATELLITE LOCK (<300ms) - display coordinates immediately!
+      setState(() {
         _latitude = coords.latitude;
         _longitude = coords.longitude;
-        if (address != null && address.isNotEmpty) {
-          _locationNotesController.text = address;
-        }
-      }
-    });
+        _isCapturingLocation = false;
+      });
 
-    if (coords == null) {
+      // Phase 2: Check internet connection BEFORE geocoding
+      final isOnline = await _networkInfo.isConnected;
+      if (!isOnline || !mounted) {
+        // Offline: Do NOT trigger geocoding or show transient detecting badge.
+        return;
+      }
+
+      // Online: Delay showing "Detecting address..." by 300ms.
+      // If the lookup finishes or fails faster than 300ms, the badge NEVER shows.
+      // This completely eliminates any 1-frame or split-second flicker!
+      _detectingTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          setState(() => _isResolvingAddress = true);
+        }
+      });
+
+      try {
+        final address = await _locationService.reverseGeocode(
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        );
+        _detectingTimer?.cancel();
+        if (!mounted) return;
+
+        if (address != null && address.isNotEmpty) {
+          setState(() {
+            _isResolvingAddress = false;
+            final currentText = _locationNotesController.text.trim();
+            if (currentText.isEmpty) {
+              // Stage 2A: Field is empty -> auto-fill smoothly
+              _locationNotesController.text = address;
+            } else if (currentText != address) {
+              // Stage 2B: User already typed custom text -> show smart suggestion pill
+              _detectedAddress = address;
+              _showAddressSuggestion = true;
+            }
+          });
+        } else {
+          if (mounted) setState(() => _isResolvingAddress = false);
+        }
+      } catch (_) {
+        _detectingTimer?.cancel();
+        if (mounted) setState(() => _isResolvingAddress = false);
+      }
+    } else {
+      _detectingTimer?.cancel();
+      setState(() {
+        _isCapturingLocation = false;
+        _isResolvingAddress = false;
+      });
       AppSnackBar.showWarning(
         context,
-        'GPS signal unavailable or permission denied. Please enter manual location notes below.',
+        'GPS signal unavailable or permission denied. Please enter manual location details below.',
         title: 'Location Notice',
       );
     }
@@ -644,11 +711,35 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
                 ),
                 const SizedBox(height: 18),
 
-                // 6. Manual Location
+                // 6. Manual Location & Address
+                Row(
+                  children: [
+                    Text('Location', style: subHeadingStyle),
+                    if (_isResolvingAddress) ...[
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 11,
+                        height: 11,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.8,
+                          color: isDark ? AppColors.accentDark : AppColors.primaryLight,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Detecting address...',
+                        style: subHeadingStyle?.copyWith(
+                          fontStyle: FontStyle.italic,
+                          fontSize: 11.5,
+                          color: isDark ? AppColors.accentDark : AppColors.primaryLight,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 6),
                 AppTextField(
                   controller: _locationNotesController,
-                  label: 'Location',
-                  labelStyle: subHeadingStyle,
                   hintText: 'e.g. Sector 4, Building C, Room 302',
                   prefixIcon: const Icon(
                     Icons.edit_location_alt_outlined,
@@ -658,6 +749,135 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
                   minLines: 1,
                   maxLines: 5,
                   enabled: !isSubmitting,
+                ),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 320),
+                  reverseDuration: const Duration(milliseconds: 260),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    return SizeTransition(
+                      sizeFactor: animation,
+                      alignment: Alignment.topCenter,
+                      child: ClipRect(
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0.0, -0.3),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  child: (_showAddressSuggestion && _detectedAddress != null)
+                      ? Padding(
+                          key: const ValueKey('detected_address_suggestion'),
+                          padding: const EdgeInsets.only(
+                            top: 8.0,
+                            left: 2.0,
+                            right: 2.0,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _detectedAddress!,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    height: 1.35,
+                                    fontWeight: FontWeight.w500,
+                                    color: isDark
+                                        ? AppColors.textPrimaryDark
+                                        : AppColors.textPrimaryLight,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _locationNotesController.text =
+                                        _detectedAddress!;
+                                    _showAddressSuggestion = false;
+                                  });
+                                },
+                                child: Text(
+                                  'Use',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? AppColors.accentDark
+                                        : AppColors.primaryLight,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    final current =
+                                        _locationNotesController.text.trim();
+                                    _locationNotesController.text =
+                                        current.isEmpty
+                                            ? _detectedAddress!
+                                            : '$current, ${_detectedAddress!}';
+                                    _showAddressSuggestion = false;
+                                  });
+                                },
+                                child: Text(
+                                  '+ Append',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? AppColors.accentDark
+                                        : AppColors.primaryLight,
+                                  ),
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () => setState(
+                                    () => _showAddressSuggestion = false),
+                                borderRadius: BorderRadius.circular(10),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4.0),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : AppColors.textSecondaryLight,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : const SizedBox.shrink(
+                          key: ValueKey('detected_address_empty'),
+                        ),
                 ),
                 const SizedBox(height: 24),
 

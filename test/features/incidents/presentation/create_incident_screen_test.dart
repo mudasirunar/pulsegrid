@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pulsegrid/core/network/network_info.dart';
 import 'package:pulsegrid/core/theme/app_theme.dart';
 import 'package:pulsegrid/features/auth/domain/entities/user_entity.dart';
 import 'package:pulsegrid/features/auth/domain/entities/user_role.dart';
@@ -33,6 +34,17 @@ class _FakeLocationService implements LocationService {
 
   @override
   Future<bool> requestPermission() async => true;
+}
+
+class _FakeNetworkInfo implements NetworkInfo {
+  final bool connected;
+  _FakeNetworkInfo([this.connected = true]);
+
+  @override
+  Future<bool> get isConnected async => connected;
+
+  @override
+  Stream<bool> get onConnectivityChanged => Stream.value(connected);
 }
 
 class _FakeMediaService implements MediaService {
@@ -115,6 +127,7 @@ void main() {
   Widget buildScreen({
     LocationService? locationService,
     MediaService? mediaService,
+    NetworkInfo? networkInfo,
   }) {
     return MaterialApp(
       theme: AppTheme.lightTheme,
@@ -127,6 +140,7 @@ void main() {
                 (latitude: 37.7749, longitude: -122.4194),
               ),
           mediaService: mediaService ?? _FakeMediaService(),
+          networkInfo: networkInfo ?? _FakeNetworkInfo(true),
         ),
       ),
     );
@@ -181,6 +195,83 @@ void main() {
 
     expect(find.text('40.71280° N, 74.00600° W'), findsOneWidget);
     expect(find.text('Broadway & 42nd St, Manhattan, NY'), findsOneWidget); // in location note field
+  });
+
+  testWidgets('GPS capture: if user already typed location, displays suggestion pill with Use and + Append',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final fakeLocation = _FakeLocationService(
+      (latitude: 40.7128, longitude: -74.0060),
+      'Broadway & 42nd St, Manhattan, NY',
+    );
+
+    await tester.pumpWidget(buildScreen(locationService: fakeLocation));
+    await tester.pumpAndSettle();
+
+    // Type in Location field before capturing GPS
+    await tester.enterText(
+      find.byWidgetPredicate((w) =>
+          w is TextField &&
+          w.decoration?.hintText == 'e.g. Sector 4, Building C, Room 302'),
+      'Room 302, Sector 4',
+    );
+    await tester.pump();
+
+    // Tap "Capture GPS"
+    await tester.tap(find.byTooltip('Capture GPS'));
+    await tester.pumpAndSettle();
+
+    // Coordinates locked
+    expect(find.text('40.71280° N, 74.00600° W'), findsOneWidget);
+    // User typed text is NOT overwritten
+    expect(find.text('Room 302, Sector 4'), findsOneWidget);
+    // Suggestion displayed flat without card or prefix
+    expect(find.text('Broadway & 42nd St, Manhattan, NY'), findsOneWidget);
+    expect(find.text('Use'), findsOneWidget);
+    expect(find.text('+ Append'), findsOneWidget);
+
+    // Tap + Append
+    await tester.tap(find.text('+ Append'));
+    await tester.pumpAndSettle();
+
+    // Combines user text + detected address
+    expect(find.text('Room 302, Sector 4, Broadway & 42nd St, Manhattan, NY'),
+        findsOneWidget);
+    // Suggestion pill dismissed
+    expect(find.text('+ Append'), findsNothing);
+  });
+
+  testWidgets(
+      'GPS capture: when offline, captures coordinates instantly without flickering detecting badge or geocoding',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final fakeLocation = _FakeLocationService(
+      (latitude: 40.7128, longitude: -74.0060),
+      'Should Not Be Called',
+    );
+
+    await tester.pumpWidget(buildScreen(
+      locationService: fakeLocation,
+      networkInfo: _FakeNetworkInfo(false), // OFFLINE
+    ));
+    await tester.pumpAndSettle();
+
+    // Tap "Capture GPS"
+    await tester.tap(find.byTooltip('Capture GPS'));
+    await tester.pump();
+
+    // Coordinates locked immediately
+    expect(find.text('40.71280° N, 74.00600° W'), findsOneWidget);
+    // Detecting address was NEVER shown
+    expect(find.text('Detecting address...'), findsNothing);
+    // Location field remains empty for manual input
+    expect(find.text('Should Not Be Called'), findsNothing);
   });
 
   testWidgets('Submitting valid form dispatches CreateIncidentEvent',
