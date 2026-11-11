@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark mode launch splash screen: seamless #121413 background with original rounded-corner app logo -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background_dark" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/splash_icon_dark" />
+    </item>
+</layer-list>
+

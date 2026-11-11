@@ -83,30 +83,28 @@ class TacticalChamferHeader extends StatelessWidget {
             ),
             const SizedBox(height: 18),
 
-            // Center Tactical Emblem with glowing halo
+            // Center Tactical App Logo (no white background, rounded corner)
             Container(
-              width: 56,
-              height: 56,
+              width: 58,
+              height: 58,
               decoration: BoxDecoration(
-                color: isDark
-                    ? AppColors.backgroundDark.withValues(alpha: 0.7)
-                    : Colors.black.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: accentColor,
-                  width: 1.5,
-                ),
                 boxShadow: [
                   BoxShadow(
-                    color: accentColor.withValues(alpha: isDark ? 0.25 : 0.15),
-                    blurRadius: 10,
+                    color: accentColor.withValues(alpha: isDark ? 0.35 : 0.2),
+                    blurRadius: 14,
+                    spreadRadius: -2,
                   ),
                 ],
               ),
-              child: Icon(
-                Icons.crisis_alert_rounded,
-                size: 30,
-                color: accentColor,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.asset(
+                  'assets/icon/app_icon_transparent.png',
+                  width: 58,
+                  height: 58,
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
             const SizedBox(height: 12),
