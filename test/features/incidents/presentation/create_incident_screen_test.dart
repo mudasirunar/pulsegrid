@@ -1,0 +1,282 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:pulsegrid/core/theme/app_theme.dart';
+import 'package:pulsegrid/features/auth/domain/entities/user_entity.dart';
+import 'package:pulsegrid/features/auth/domain/entities/user_role.dart';
+import 'package:pulsegrid/features/incidents/domain/entities/activity_event_entity.dart';
+import 'package:pulsegrid/features/incidents/domain/entities/incident_entity.dart';
+import 'package:pulsegrid/features/incidents/domain/entities/incident_severity.dart';
+import 'package:pulsegrid/features/incidents/domain/entities/incident_status.dart';
+import 'package:pulsegrid/features/incidents/domain/repositories/incident_repository.dart';
+import 'package:pulsegrid/features/incidents/domain/services/location_service.dart';
+import 'package:pulsegrid/features/incidents/domain/services/media_service.dart';
+import 'package:pulsegrid/features/incidents/presentation/bloc/incident_bloc.dart';
+import 'package:pulsegrid/features/incidents/presentation/screens/create_incident_screen.dart';
+
+class _FakeLocationService implements LocationService {
+  final ({double latitude, double longitude})? coords;
+  final String? address;
+  _FakeLocationService([this.coords, this.address]);
+
+  @override
+  Future<({double latitude, double longitude})?> getCurrentLocation() async => coords;
+
+  @override
+  Future<String?> reverseGeocode({
+    required double latitude,
+    required double longitude,
+  }) async => address;
+
+  @override
+  Future<bool> checkPermission() async => true;
+
+  @override
+  Future<bool> requestPermission() async => true;
+}
+
+class _FakeMediaService implements MediaService {
+  final List<String> cameraReturnPaths;
+  final List<String> galleryReturnPaths;
+  int _cameraIndex = 0;
+
+  _FakeMediaService({
+    this.cameraReturnPaths = const [],
+    this.galleryReturnPaths = const [],
+  });
+
+  @override
+  Future<String?> pickImageFromCamera() async {
+    if (_cameraIndex < cameraReturnPaths.length) {
+      return cameraReturnPaths[_cameraIndex++];
+    }
+    return null;
+  }
+
+  @override
+  Future<String?> pickImageFromGallery() async =>
+      galleryReturnPaths.isNotEmpty ? galleryReturnPaths.first : null;
+
+  @override
+  Future<List<String>> pickMultipleImagesFromGallery({int maxImages = 5}) async =>
+      galleryReturnPaths.take(maxImages).toList();
+}
+
+class _MockRepo implements IncidentRepository {
+  IncidentEntity? lastCreated;
+
+  @override
+  Future<IncidentEntity> createIncident(IncidentEntity incident) async {
+    lastCreated = incident;
+    return incident;
+  }
+
+  @override
+  Future<List<IncidentEntity>> getIncidents({
+    IncidentStatus? statusFilter,
+    IncidentSeverity? severityFilter,
+    String? searchQuery,
+  }) async => [];
+
+  @override
+  Future<IncidentEntity?> getIncidentById(String id) async => null;
+
+  @override
+  Future<IncidentEntity> updateIncidentStatus({
+    required String incidentId,
+    required IncidentStatus targetStatus,
+    required UserEntity actor,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<ActivityEventEntity>> getActivityTimeline(String incidentId) async => [];
+}
+
+void main() {
+  late _MockRepo repository;
+  late IncidentBloc bloc;
+
+  final user = const UserEntity(
+    id: 'user_responder_1',
+    email: 'responder@pulsegrid.com',
+    displayName: 'Paramedic Jane',
+    role: UserRole.responder,
+  );
+
+  setUp(() {
+    repository = _MockRepo();
+    bloc = IncidentBloc(incidentRepository: repository);
+  });
+
+  tearDown(() => bloc.close());
+
+  Widget buildScreen({
+    LocationService? locationService,
+    MediaService? mediaService,
+  }) {
+    return MaterialApp(
+      theme: AppTheme.lightTheme,
+      home: BlocProvider<IncidentBloc>.value(
+        value: bloc,
+        child: CreateIncidentScreen(
+          currentUser: user,
+          locationService: locationService ??
+              _FakeLocationService(
+                (latitude: 37.7749, longitude: -122.4194),
+              ),
+          mediaService: mediaService ?? _FakeMediaService(),
+        ),
+      ),
+    );
+  }
+
+  testWidgets('Validation: shows error on empty title & description and clears on typing',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    // Verify form renders
+    expect(find.text('Report New Incident'), findsOneWidget);
+    expect(find.text('Report Incident'), findsOneWidget);
+
+    // Tap submit with empty fields
+    await tester.tap(find.text('Report Incident'));
+    await tester.pump();
+
+    // Error text shown
+    expect(find.text('Incident title is required'), findsOneWidget);
+    expect(find.text('Operational description is required'), findsOneWidget);
+
+    // Type in title -> error clears
+    await tester.enterText(find.byType(TextField).first, 'Transformer Explosion');
+    await tester.pump();
+
+    expect(find.text('Incident title is required'), findsNothing);
+    expect(find.text('Operational description is required'), findsOneWidget);
+  });
+
+  testWidgets('GPS capture: fetches coordinates and fills location display with reverse-geocoded address',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final fakeLocation = _FakeLocationService(
+      (latitude: 40.7128, longitude: -74.0060),
+      'Broadway & 42nd St, Manhattan, NY',
+    );
+
+    await tester.pumpWidget(buildScreen(locationService: fakeLocation));
+    await tester.pumpAndSettle();
+
+    // Tap "Capture GPS"
+    await tester.tap(find.byTooltip('Capture GPS'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('40.71280° N, 74.00600° W'), findsOneWidget);
+    expect(find.text('Broadway & 42nd St, Manhattan, NY'), findsOneWidget); // in location note field
+  });
+
+  testWidgets('Submitting valid form dispatches CreateIncidentEvent',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    // Fill Title
+    await tester.enterText(find.byType(TextField).at(0), 'Substation Fire');
+    // Fill Description
+    await tester.enterText(find.byType(TextField).at(1), 'Active fire threatening adjacent residential units');
+    await tester.pump();
+
+    // Tap Submit
+    await tester.tap(find.text('Report Incident'));
+    await tester.pump();
+
+    expect(repository.lastCreated, isNotNull);
+    expect(repository.lastCreated!.title, 'Substation Fire');
+    expect(repository.lastCreated!.category, 'Medical');
+    expect(repository.lastCreated!.status, IncidentStatus.newIncident);
+  });
+
+  testWidgets('Multi-photo: picks multiple photos from gallery, shows thumbnails, removes photo, and enforces max 5',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final mediaService = _FakeMediaService(
+      galleryReturnPaths: [
+        '/tmp/photo1.jpg',
+        '/tmp/photo2.jpg',
+        '/tmp/photo3.jpg',
+      ],
+      cameraReturnPaths: [
+        '/tmp/photo4.jpg',
+        '/tmp/photo5.jpg',
+        '/tmp/photo6_overflow.jpg',
+      ],
+    );
+
+    await tester.pumpWidget(buildScreen(mediaService: mediaService));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Evidence Photos (0/5)'), findsOneWidget);
+
+    // Tap Gallery button
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Gallery'));
+    await tester.pumpAndSettle();
+
+    // 3 photos attached
+    expect(find.text('Evidence Photos (3/5)'), findsOneWidget);
+    expect(find.text('#1'), findsOneWidget);
+    expect(find.text('#2'), findsOneWidget);
+    expect(find.text('#3'), findsOneWidget);
+
+    // Remove photo #2 (second close button)
+    final closeButtons = find.byIcon(Icons.close);
+    expect(closeButtons, findsNWidgets(3));
+    await tester.tap(closeButtons.at(1));
+    await tester.pumpAndSettle();
+
+    // Now 2 photos remain
+    expect(find.text('Evidence Photos (2/5)'), findsOneWidget);
+
+    // Tap Add Camera twice to add 2 more
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Add Camera'));
+    await tester.pumpAndSettle();
+    expect(find.text('Evidence Photos (3/5)'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Add Camera'));
+    await tester.pumpAndSettle();
+    expect(find.text('Evidence Photos (4/5)'), findsOneWidget);
+
+    // Add another via Add Camera to reach 5
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Add Camera'));
+    await tester.pumpAndSettle();
+    expect(find.text('Evidence Photos (5/5)'), findsOneWidget);
+    // Buttons hidden when limit is reached
+    expect(find.byType(OutlinedButton), findsNothing);
+
+    // Fill title and description to submit
+    await tester.enterText(find.byType(TextField).at(0), 'Hazmat Chemical Spill');
+    await tester.enterText(find.byType(TextField).at(1), 'Corrosive chemical leak in loading dock.');
+    await tester.pump();
+
+    // Tap submit
+    await tester.tap(find.text('Report Incident'));
+    await tester.pump();
+
+    expect(repository.lastCreated, isNotNull);
+    expect(repository.lastCreated!.photoPaths.length, 5);
+  });
+}

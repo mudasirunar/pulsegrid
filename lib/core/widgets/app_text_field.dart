@@ -4,6 +4,7 @@ import '../theme/app_colors.dart';
 class AppTextField extends StatelessWidget {
   final TextEditingController? controller;
   final String? label;
+  final TextStyle? labelStyle;
   final String? hintText;
   final Widget? prefixIcon;
   final Widget? suffixIcon;
@@ -24,6 +25,7 @@ class AppTextField extends StatelessWidget {
     super.key,
     this.controller,
     this.label,
+    this.labelStyle,
     this.hintText,
     this.prefixIcon,
     this.suffixIcon,
@@ -56,10 +58,11 @@ class AppTextField extends StatelessWidget {
         if (label != null) ...[
           Text(
             label!,
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-            ),
+            style: labelStyle ??
+                theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                ),
           ),
           const SizedBox(height: 6),
         ],

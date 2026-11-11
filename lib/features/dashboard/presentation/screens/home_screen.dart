@@ -3,35 +3,30 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_cubit.dart';
-import '../../../../core/widgets/app_badge.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../auth/data/models/user_model.dart';
-import '../../../auth/domain/entities/user_role.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import '../../../auth/presentation/widgets/role_guard.dart';
+import '../../../incidents/domain/entities/incident_entity.dart';
+import '../../../incidents/presentation/bloc/incident_bloc.dart';
+import '../../../incidents/presentation/bloc/incident_state.dart';
+import '../../../incidents/presentation/screens/create_incident_screen.dart';
+import '../../../incidents/presentation/screens/incident_details_screen.dart';
+import '../../../incidents/presentation/widgets/incident_card.dart';
+import '../widgets/quick_role_switcher.dart';
+import '../widgets/role_capabilities_section.dart';
+import '../widgets/user_profile_header.dart';
 
 class HomeScreen extends StatelessWidget {
   final UserModel user;
 
   const HomeScreen({super.key, required this.user});
 
-  Color _roleColor(UserRole role) {
-    switch (role) {
-      case UserRole.coordinator:
-        return AppColors.primaryLight;
-      case UserRole.responder:
-        return AppColors.severityMedium;
-      case UserRole.viewer:
-        return AppColors.textSecondaryLight;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final roleColor = _roleColor(user.role);
 
     return Scaffold(
       appBar: AppBar(
@@ -53,101 +48,172 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+      floatingActionButton: user.role.isReadOnly
+          ? null
+          : FloatingActionButton.extended(
+              backgroundColor: AppColors.primaryLight,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_alert_outlined),
+              label: const Text(
+                'Report Incident',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CreateIncidentScreen(currentUser: user),
+                  ),
+                );
+              },
+            ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. User Session Profile (Flat on screen)
+            // 1. User Session Profile Header (Extracted Reusable Component)
+            UserProfileHeader(user: user),
+
+            Divider(
+              height: 36,
+              thickness: 1,
+              color: isDark ? AppColors.borderDark : AppColors.borderLight,
+            ),
+
+            // 2. Active Incidents Section
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                CircleAvatar(
-                  radius: 26,
-                  backgroundColor: roleColor.withValues(alpha: 0.15),
-                  child: Icon(
-                    user.role == UserRole.coordinator
-                        ? Icons.admin_panel_settings_outlined
-                        : user.role == UserRole.responder
-                            ? Icons.medical_services_outlined
-                            : Icons.visibility_outlined,
-                    color: roleColor,
-                    size: 26,
+                Text(
+                  'ACTIVE INCIDENTS',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                   ),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user.displayName,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
+                if (!user.role.isReadOnly)
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CreateIncidentScreen(currentUser: user),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        user.email,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                        ),
-                      ),
-                    ],
+                      );
+                    },
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Report', style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
-                ),
-                AppBadge(
-                  text: user.role.displayName.toUpperCase(),
-                  color: roleColor,
-                ),
               ],
             ),
+            const SizedBox(height: 8),
 
-            // Section Divider
+            BlocBuilder<IncidentBloc, IncidentState>(
+              builder: (context, state) {
+                if (state is IncidentLoading) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                List<IncidentEntity> incidents = [];
+                if (state is IncidentLoaded) {
+                  incidents = state.incidents;
+                } else if (state is IncidentOperationSuccess) {
+                  incidents = state.incidents;
+                } else if (state is IncidentOperating) {
+                  incidents = state.incidents;
+                }
+
+                if (incidents.isEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.surfaceDark : AppColors.borderLight.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.emergency_outlined,
+                          size: 36,
+                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No Emergency Incidents Reported',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Tap "+ Report Incident" to log and dispatch field responders.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: incidents.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final inc = incidents[index];
+                    return IncidentCard(
+                      incident: inc,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => IncidentDetailsScreen(
+                              incident: inc,
+                              currentUser: user,
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+
             Divider(
               height: 36,
               thickness: 1,
               color: isDark ? AppColors.borderDark : AppColors.borderLight,
             ),
 
-            // 2. Active Role Capabilities Section (Flat)
-            Text(
-              'ACTIVE ROLE CAPABILITIES',
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildPermissionRow(
-              context,
-              label: 'Create Incidents',
-              allowed: !user.role.isReadOnly,
-            ),
-            _buildPermissionRow(
-              context,
-              label: 'Assign Incidents to Responders',
-              allowed: user.role.canAssignAndClose,
-            ),
-            _buildPermissionRow(
-              context,
-              label: 'Update Status & Log Resources',
-              allowed: user.role.canUpdateAssignedAndLogResources,
-            ),
-            _buildPermissionRow(
-              context,
-              label: 'Close Incidents (Final Approval)',
-              allowed: user.role.canAssignAndClose,
-            ),
+            // 3. Active Role Capabilities Section (Extracted Reusable Component)
+            RoleCapabilitiesSection(role: user.role),
 
-            // Section Divider
             Divider(
               height: 36,
               thickness: 1,
               color: isDark ? AppColors.borderDark : AppColors.borderLight,
             ),
 
-            // 3. Role Guard Action Section (Flat)
+            // 4. Role Guard Action Section
             Text(
               'ROLE-BASED ACTION GUARDS',
               style: theme.textTheme.labelMedium?.copyWith(
@@ -247,100 +313,12 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 28),
 
-            // 4. Quick Role Switcher (Flat)
-            Text(
-              'SWITCH ROLE (DEMO / REVIEW)',
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton(
-                    text: 'Coordinator',
-                    variant: AppButtonVariant.outlined,
-                    height: 38,
-                    onPressed: () {
-                      context.read<AuthBloc>().add(
-                            const SignInWithRoleEvent(UserRole.coordinator),
-                          );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: AppButton(
-                    text: 'Responder',
-                    variant: AppButtonVariant.outlined,
-                    height: 38,
-                    onPressed: () {
-                      context.read<AuthBloc>().add(
-                            const SignInWithRoleEvent(UserRole.responder),
-                          );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: AppButton(
-                    text: 'Viewer',
-                    variant: AppButtonVariant.outlined,
-                    height: 38,
-                    onPressed: () {
-                      context.read<AuthBloc>().add(
-                            const SignInWithRoleEvent(UserRole.viewer),
-                          );
-                    },
-                  ),
-                ),
-              ],
-            ),
+            // 5. Quick Role Switcher (Extracted Reusable Component)
+            const QuickRoleSwitcher(),
             const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildPermissionRow(
-    BuildContext context, {
-    required String label,
-    required bool allowed,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(
-            allowed ? Icons.check_circle : Icons.cancel,
-            size: 18,
-            color: allowed ? AppColors.syncSynced : AppColors.severityCritical,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: allowed ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ),
-          Text(
-            allowed ? 'Allowed' : 'Restricted',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: allowed ? AppColors.syncSynced : AppColors.severityCritical,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
-

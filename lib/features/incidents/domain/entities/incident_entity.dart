@@ -18,7 +18,7 @@ class IncidentEntity extends Equatable {
   final double? latitude;
   final double? longitude;
   final String? manualLocationNotes;
-  final String? photoPath;
+  final List<String> photoPaths;
   final String createdBy;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -34,11 +34,13 @@ class IncidentEntity extends Equatable {
     this.latitude,
     this.longitude,
     this.manualLocationNotes,
-    this.photoPath,
+    this.photoPaths = const [],
     required this.createdBy,
     required this.createdAt,
     required this.updatedAt,
   });
+
+  String? get photoPath => photoPaths.isNotEmpty ? photoPaths.first : null;
 
   IncidentEntity copyWith({
     String? id,
@@ -51,7 +53,7 @@ class IncidentEntity extends Equatable {
     double? latitude,
     double? longitude,
     String? manualLocationNotes,
-    String? photoPath,
+    List<String>? photoPaths,
     String? createdBy,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -67,7 +69,7 @@ class IncidentEntity extends Equatable {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       manualLocationNotes: manualLocationNotes ?? this.manualLocationNotes,
-      photoPath: photoPath ?? this.photoPath,
+      photoPaths: photoPaths ?? this.photoPaths,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -86,7 +88,7 @@ class IncidentEntity extends Equatable {
       latitude: latitude,
       longitude: longitude,
       manualLocationNotes: manualLocationNotes,
-      photoPath: photoPath,
+      photoPaths: photoPaths,
       createdBy: createdBy,
       createdAt: createdAt,
       updatedAt: updatedAt,
@@ -105,7 +107,7 @@ class IncidentEntity extends Equatable {
       latitude: model.latitude,
       longitude: model.longitude,
       manualLocationNotes: model.manualLocationNotes,
-      photoPath: model.photoPath,
+      photoPaths: model.photoPaths,
       createdBy: model.createdBy,
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,
@@ -124,10 +126,9 @@ class IncidentEntity extends Equatable {
         latitude,
         longitude,
         manualLocationNotes,
-        photoPath,
+        photoPaths,
         createdBy,
         createdAt,
         updatedAt,
       ];
 }
-

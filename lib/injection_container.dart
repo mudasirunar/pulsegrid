@@ -1,7 +1,6 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'core/database/app_database.dart';
 import 'core/database/local_data_source.dart';
 import 'core/network/network_info.dart';
@@ -9,6 +8,11 @@ import 'core/theme/theme_cubit.dart';
 import 'features/auth/data/repositories/auth_repository_impl.dart';
 import 'features/auth/domain/repositories/auth_repository.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
+import 'features/incidents/data/repositories/incident_repository_impl.dart';
+import 'features/incidents/domain/repositories/incident_repository.dart';
+import 'features/incidents/domain/services/location_service.dart';
+import 'features/incidents/domain/services/media_service.dart';
+import 'features/incidents/presentation/bloc/incident_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -38,8 +42,17 @@ Future<void> initInjection() async {
   sl.registerLazySingleton<AuthRepository>(
     () => AuthRepositoryImpl(sharedPreferences: sl()),
   );
-  sl.registerFactory<AuthBloc>(
-    () => AuthBloc(authRepository: sl()),
+  sl.registerFactory<AuthBloc>(() => AuthBloc(authRepository: sl()));
+
+  // -------------------------------------------------------------
+  // Incidents Feature
+  // -------------------------------------------------------------
+  sl.registerLazySingleton<LocationService>(() => LocationServiceImpl());
+  sl.registerLazySingleton<MediaService>(() => MediaServiceImpl());
+  sl.registerLazySingleton<IncidentRepository>(
+    () => IncidentRepositoryImpl(localDataSource: sl()),
+  );
+  sl.registerFactory<IncidentBloc>(
+    () => IncidentBloc(incidentRepository: sl()),
   );
 }
-

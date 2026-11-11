@@ -9,6 +9,8 @@ import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
 import 'features/auth/presentation/screens/sign_in_screen.dart';
 import 'features/dashboard/presentation/screens/home_screen.dart';
+import 'features/incidents/presentation/bloc/incident_bloc.dart';
+import 'features/incidents/presentation/bloc/incident_event.dart';
 import 'injection_container.dart' as di;
 
 void main() async {
@@ -22,6 +24,9 @@ void main() async {
         BlocProvider(create: (_) => di.sl<ThemeCubit>()),
         BlocProvider(
           create: (_) => di.sl<AuthBloc>()..add(const CheckAuthStatusEvent()),
+        ),
+        BlocProvider(
+          create: (_) => di.sl<IncidentBloc>()..add(const LoadIncidentsEvent()),
         ),
       ],
       child: const PulseGridApp(),

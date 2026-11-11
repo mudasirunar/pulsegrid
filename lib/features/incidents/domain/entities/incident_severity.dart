@@ -8,6 +8,8 @@ enum IncidentSeverity {
   final String value;
   const IncidentSeverity(this.value);
 
+  String get displayName => value;
+
   static IncidentSeverity fromString(String val) {
     final clean = val.trim().toLowerCase();
     return IncidentSeverity.values.firstWhere(

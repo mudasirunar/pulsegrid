@@ -7,6 +7,7 @@ class UserModel extends UserEntity {
     required super.id,
     required super.email,
     required super.displayName,
+    super.rank,
     required super.role,
   });
 
@@ -15,17 +16,35 @@ class UserModel extends UserEntity {
       'id': id,
       'email': email,
       'displayName': displayName,
+      if (rank != null) 'rank': rank,
       'role': role.name,
     };
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
+    final rawName = (map['displayName'] as String?) ?? '';
+    final parsed = parseNameAndRank(rawName);
+
+    final explicitRank = map['rank'] as String?;
+    final rank = (explicitRank != null && explicitRank.isNotEmpty)
+        ? explicitRank
+        : parsed.rank;
+
     return UserModel(
       id: map['id'] as String,
-      email: map['email'] as String,
-      displayName: map['displayName'] as String,
+      email: (map['email'] as String?) ?? '',
+      displayName: parsed.name.isNotEmpty ? parsed.name : rawName,
+      rank: rank,
       role: UserRole.fromString(map['role'] as String),
     );
+  }
+
+  static ({String name, String? rank}) parseNameAndRank(String raw) {
+    final match = RegExp(r'^(.*?)\s*\((.*?)\)$').firstMatch(raw.trim());
+    if (match != null) {
+      return (name: match.group(1)!.trim(), rank: match.group(2)!.trim());
+    }
+    return (name: raw.trim(), rank: null);
   }
 
   String toJson() => json.encode(toMap());

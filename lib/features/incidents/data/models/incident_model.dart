@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:equatable/equatable.dart';
 import '../../../../core/database/database_constants.dart';
 
@@ -12,7 +13,7 @@ class IncidentModel extends Equatable {
   final double? latitude;
   final double? longitude;
   final String? manualLocationNotes;
-  final String? photoPath;
+  final List<String> photoPaths;
   final String createdBy;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -28,11 +29,13 @@ class IncidentModel extends Equatable {
     this.latitude,
     this.longitude,
     this.manualLocationNotes,
-    this.photoPath,
+    this.photoPaths = const [],
     required this.createdBy,
     required this.createdAt,
     required this.updatedAt,
   });
+
+  String? get photoPath => photoPaths.isNotEmpty ? photoPaths.first : null;
 
   Map<String, dynamic> toMap() {
     return {
@@ -46,7 +49,7 @@ class IncidentModel extends Equatable {
       DatabaseConstants.colLatitude: latitude,
       DatabaseConstants.colLongitude: longitude,
       DatabaseConstants.colManualLocationNotes: manualLocationNotes,
-      DatabaseConstants.colPhotoPath: photoPath,
+      DatabaseConstants.colPhotoPath: photoPaths.isEmpty ? null : jsonEncode(photoPaths),
       DatabaseConstants.colCreatedBy: createdBy,
       DatabaseConstants.colCreatedAt: createdAt.toIso8601String(),
       DatabaseConstants.colUpdatedAt: updatedAt.toIso8601String(),
@@ -54,6 +57,23 @@ class IncidentModel extends Equatable {
   }
 
   factory IncidentModel.fromMap(Map<String, dynamic> map) {
+    final rawPhoto = map[DatabaseConstants.colPhotoPath] as String?;
+    List<String> photos = [];
+    if (rawPhoto != null && rawPhoto.isNotEmpty) {
+      if (rawPhoto.startsWith('[')) {
+        try {
+          final decoded = jsonDecode(rawPhoto);
+          if (decoded is List) {
+            photos = decoded.map((e) => e.toString()).toList();
+          }
+        } catch (_) {
+          photos = [rawPhoto];
+        }
+      } else {
+        photos = [rawPhoto];
+      }
+    }
+
     return IncidentModel(
       id: map[DatabaseConstants.colId] as String,
       title: map[DatabaseConstants.colTitle] as String,
@@ -65,7 +85,7 @@ class IncidentModel extends Equatable {
       latitude: (map[DatabaseConstants.colLatitude] as num?)?.toDouble(),
       longitude: (map[DatabaseConstants.colLongitude] as num?)?.toDouble(),
       manualLocationNotes: map[DatabaseConstants.colManualLocationNotes] as String?,
-      photoPath: map[DatabaseConstants.colPhotoPath] as String?,
+      photoPaths: photos,
       createdBy: map[DatabaseConstants.colCreatedBy] as String,
       createdAt: DateTime.parse(map[DatabaseConstants.colCreatedAt] as String),
       updatedAt: DateTime.parse(map[DatabaseConstants.colUpdatedAt] as String),
@@ -83,7 +103,7 @@ class IncidentModel extends Equatable {
     double? latitude,
     double? longitude,
     String? manualLocationNotes,
-    String? photoPath,
+    List<String>? photoPaths,
     String? createdBy,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -99,7 +119,7 @@ class IncidentModel extends Equatable {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       manualLocationNotes: manualLocationNotes ?? this.manualLocationNotes,
-      photoPath: photoPath ?? this.photoPath,
+      photoPaths: photoPaths ?? this.photoPaths,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -118,10 +138,9 @@ class IncidentModel extends Equatable {
         latitude,
         longitude,
         manualLocationNotes,
-        photoPath,
+        photoPaths,
         createdBy,
         createdAt,
         updatedAt,
       ];
 }
-

@@ -6,22 +6,62 @@ import 'package:pulsegrid/core/theme/theme_cubit.dart';
 import 'package:pulsegrid/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:pulsegrid/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:pulsegrid/features/auth/presentation/bloc/auth_state.dart';
+import 'package:pulsegrid/features/incidents/domain/entities/activity_event_entity.dart';
+import 'package:pulsegrid/features/incidents/domain/entities/incident_entity.dart';
+import 'package:pulsegrid/features/incidents/domain/entities/incident_severity.dart';
+import 'package:pulsegrid/features/incidents/domain/entities/incident_status.dart';
+import 'package:pulsegrid/features/incidents/domain/repositories/incident_repository.dart';
+import 'package:pulsegrid/features/incidents/presentation/bloc/incident_bloc.dart';
+import 'package:pulsegrid/features/incidents/presentation/bloc/incident_state.dart';
 import 'package:pulsegrid/main.dart';
+
+class _FakeIncidentRepository implements IncidentRepository {
+  @override
+  Future<IncidentEntity> createIncident(IncidentEntity incident) async => incident;
+
+  @override
+  Future<List<ActivityEventEntity>> getActivityTimeline(String incidentId) async => [];
+
+  @override
+  Future<IncidentEntity?> getIncidentById(String id) async => null;
+
+  @override
+  Future<List<IncidentEntity>> getIncidents({
+    IncidentStatus? statusFilter,
+    IncidentSeverity? severityFilter,
+    String? searchQuery,
+  }) async => [];
+
+  @override
+  Future<IncidentEntity> updateIncidentStatus({
+    required String incidentId,
+    required IncidentStatus targetStatus,
+    required actor,
+  }) async {
+    throw UnimplementedError();
+  }
+}
 
 void main() {
   late SharedPreferences prefs;
   late AuthRepositoryImpl authRepository;
   late ThemeCubit themeCubit;
+  late IncidentBloc incidentBloc;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     authRepository = AuthRepositoryImpl(sharedPreferences: prefs);
     themeCubit = ThemeCubit(prefs);
+    incidentBloc = IncidentBloc(
+      incidentRepository: _FakeIncidentRepository(),
+      initialState: const IncidentLoaded([]),
+    );
   });
 
   tearDown(() {
     themeCubit.close();
+    incidentBloc.close();
   });
 
   Widget createWidgetUnderTest(AuthBloc authBloc) {
@@ -29,6 +69,7 @@ void main() {
       providers: [
         BlocProvider<ThemeCubit>.value(value: themeCubit),
         BlocProvider<AuthBloc>.value(value: authBloc),
+        BlocProvider<IncidentBloc>.value(value: incidentBloc),
       ],
       child: const PulseGridApp(),
     );

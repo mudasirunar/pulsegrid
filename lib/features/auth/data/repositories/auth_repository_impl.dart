@@ -29,21 +29,24 @@ class AuthRepositoryImpl implements AuthRepository {
   static const UserModel coordinatorDemo = UserModel(
     id: 'user-coordinator-01',
     email: coordinatorEmail,
-    displayName: 'Sarah Chen (Incident Commander)',
+    displayName: 'Sarah Chen',
+    rank: 'Incident Commander',
     role: UserRole.coordinator,
   );
 
   static const UserModel responderDemo = UserModel(
     id: 'user-responder-01',
     email: responderEmail,
-    displayName: 'Marcus Vance (Field Responder)',
+    displayName: 'Marcus Vance',
+    rank: 'Field Responder',
     role: UserRole.responder,
   );
 
   static const UserModel viewerDemo = UserModel(
     id: 'user-viewer-01',
     email: viewerEmail,
-    displayName: 'Auditor Evans (Liaison)',
+    displayName: 'Auditor Evans',
+    rank: 'Liaison',
     role: UserRole.viewer,
   );
 
@@ -78,15 +81,16 @@ class AuthRepositoryImpl implements AuthRepository {
       throw const ValidationException('Email and password must not be empty.');
     }
 
-    final (displayName, role) = _inferProfile(cleanEmail);
+    final (inferredName, inferredRank, inferredRole) = _inferProfile(cleanEmail);
 
     // If Firebase is not initialized (e.g. running unit tests without native Firebase mock)
     if (firebaseAuth == null && Firebase.apps.isEmpty) {
       final user = UserModel(
         id: 'user-${cleanEmail.replaceAll('@', '-').replaceAll('.', '-')}',
         email: cleanEmail,
-        displayName: displayName,
-        role: role,
+        displayName: inferredName,
+        rank: inferredRank,
+        role: inferredRole,
       );
       await sharedPreferences.setString(_sessionKey, user.toJson());
       return user;
@@ -126,8 +130,9 @@ class AuthRepositoryImpl implements AuthRepository {
     final uid = userObj.uid;
 
     // 2. Fetch user profile from Cloud Firestore (/users/{uid}) as primary source of truth
-    String resolvedDisplayName = userObj.displayName ?? cleanEmail.split('@').first;
-    UserRole resolvedRole = UserRole.viewer;
+    String resolvedDisplayName = userObj.displayName ?? inferredName;
+    String? resolvedRank = inferredRank;
+    UserRole resolvedRole = inferredRole;
 
     try {
       final userDoc = db.collection('users').doc(uid);
@@ -135,12 +140,25 @@ class AuthRepositoryImpl implements AuthRepository {
       if (snapshot.exists && snapshot.data() != null) {
         final data = snapshot.data()!;
         if (data['displayName'] != null && (data['displayName'] as String).isNotEmpty) {
-          resolvedDisplayName = data['displayName'] as String;
+          final parsed = UserModel.parseNameAndRank(data['displayName'] as String);
+          resolvedDisplayName = parsed.name;
+          resolvedRank = (data['rank'] as String?) ?? parsed.rank ?? inferredRank;
+        }
+        if (data['rank'] != null && (data['rank'] as String).isNotEmpty) {
+          resolvedRank = data['rank'] as String;
         }
         if (data['role'] != null) {
           resolvedRole = UserRole.fromString(data['role'] as String);
         }
       }
+
+      // Clean up and standardize the document in Cloud Firestore
+      await userDoc.set({
+        'displayName': resolvedDisplayName,
+        'rank': resolvedRank,
+        'role': resolvedRole.name,
+        'email': cleanEmail,
+      }, SetOptions(merge: true));
     } catch (_) {
       // If offline after initial auth, fall back to cached session
       final cached = await getCurrentUser();
@@ -153,6 +171,7 @@ class AuthRepositoryImpl implements AuthRepository {
       id: uid,
       email: cleanEmail,
       displayName: resolvedDisplayName,
+      rank: resolvedRank,
       role: resolvedRole,
     );
 
@@ -175,13 +194,13 @@ class AuthRepositoryImpl implements AuthRepository {
     await sharedPreferences.setString(_sessionKey, user.toJson());
   }
 
-  (String displayName, UserRole role) _inferProfile(String email) {
+  (String displayName, String rank, UserRole role) _inferProfile(String email) {
     if (email.contains('coordinator')) {
-      return ('Sarah Chen (Incident Commander)', UserRole.coordinator);
+      return ('Sarah Chen', 'Incident Commander', UserRole.coordinator);
     } else if (email.contains('viewer')) {
-      return ('Auditor Evans (Liaison)', UserRole.viewer);
+      return ('Auditor Evans', 'Liaison', UserRole.viewer);
     } else {
-      return ('Marcus Vance (Field Responder)', UserRole.responder);
+      return ('Marcus Vance', 'Field Responder', UserRole.responder);
     }
   }
 }

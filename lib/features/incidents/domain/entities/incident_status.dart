@@ -11,6 +11,8 @@ enum IncidentStatus {
   final String value;
   const IncidentStatus(this.value);
 
+  String get displayName => value;
+
   static IncidentStatus fromString(String val) {
     final clean = val.trim().toLowerCase();
     return IncidentStatus.values.firstWhere(

@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Pulse Grid requires location access to attach GPS coordinates to emergency incident reports.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Pulse Grid requires camera access to capture emergency incident evidence photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Pulse Grid requires photo library access to attach incident photos from gallery.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
