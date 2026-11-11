@@ -129,7 +129,7 @@ class AppButton extends StatelessWidget {
       case AppButtonVariant.primary:
         return (
           theme.colorScheme.primary,
-          Colors.white,
+          theme.colorScheme.onPrimary,
           null,
         );
       case AppButtonVariant.outlined:

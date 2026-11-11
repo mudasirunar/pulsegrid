@@ -12,11 +12,11 @@ abstract class AppTheme {
       brightness: Brightness.light,
       scaffoldBackgroundColor: AppColors.backgroundLight,
       colorScheme: const ColorScheme.light(
-        primary: AppColors.primaryBlueLight,
+        primary: AppColors.primaryLight,
         onPrimary: Colors.white,
-        primaryContainer: AppColors.secondaryBlueLight,
-        onPrimaryContainer: AppColors.primaryNavyLight,
-        secondary: AppColors.primaryNavyLight,
+        primaryContainer: AppColors.primaryContainerLight,
+        onPrimaryContainer: AppColors.primaryLight,
+        secondary: AppColors.accentLight,
         onSecondary: Colors.white,
         surface: AppColors.surfaceLight,
         onSurface: AppColors.textPrimaryLight,
@@ -26,16 +26,17 @@ abstract class AppTheme {
       ),
       textTheme: textTheme,
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.primaryNavyLight,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.backgroundLight,
+        foregroundColor: AppColors.textPrimaryLight,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: false,
-        systemOverlayStyle: SystemUiOverlayStyle.light,
-        iconTheme: IconThemeData(color: Colors.white),
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        iconTheme: IconThemeData(color: AppColors.textPrimaryLight),
         titleTextStyle: TextStyle(
           fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimaryLight,
           letterSpacing: -0.2,
         ),
       ),
@@ -50,7 +51,7 @@ abstract class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primaryBlueLight,
+          backgroundColor: AppColors.primaryLight,
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -65,8 +66,8 @@ abstract class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primaryBlueLight,
-          side: const BorderSide(color: AppColors.primaryBlueLight, width: 1.5),
+          foregroundColor: AppColors.primaryLight,
+          side: const BorderSide(color: AppColors.primaryLight, width: 1.5),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
@@ -91,7 +92,7 @@ abstract class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.primaryBlueLight, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.primaryLight, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -125,11 +126,11 @@ abstract class AppTheme {
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColors.backgroundDark,
       colorScheme: const ColorScheme.dark(
-        primary: AppColors.primaryBlueDark,
+        primary: AppColors.primaryDark,
         onPrimary: Colors.white,
-        primaryContainer: AppColors.surfaceDark,
+        primaryContainer: AppColors.primaryContainerDark,
         onPrimaryContainer: AppColors.textPrimaryDark,
-        secondary: AppColors.primaryNavyDark,
+        secondary: AppColors.accentDark,
         onSecondary: Colors.white,
         surface: AppColors.surfaceDark,
         onSurface: AppColors.textPrimaryDark,
@@ -139,16 +140,17 @@ abstract class AppTheme {
       ),
       textTheme: textTheme,
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.surfaceDark,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.backgroundDark,
+        foregroundColor: AppColors.textPrimaryDark,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: false,
         systemOverlayStyle: SystemUiOverlayStyle.light,
-        iconTheme: IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: AppColors.textPrimaryDark),
         titleTextStyle: TextStyle(
           fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimaryDark,
           letterSpacing: -0.2,
         ),
       ),
@@ -163,7 +165,7 @@ abstract class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primaryBlueDark,
+          backgroundColor: AppColors.primaryDark,
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -178,8 +180,8 @@ abstract class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primaryBlueDark,
-          side: const BorderSide(color: AppColors.primaryBlueDark, width: 1.5),
+          foregroundColor: AppColors.primaryDark,
+          side: const BorderSide(color: AppColors.primaryDark, width: 1.5),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
@@ -204,7 +206,7 @@ abstract class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.primaryBlueDark, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.primaryDark, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
