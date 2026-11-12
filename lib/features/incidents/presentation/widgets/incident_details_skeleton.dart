@@ -109,62 +109,78 @@ class IncidentDetailsSkeleton extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. Incident Title Line Shimmer
+          // 1. Top Eyebrow Badges Row Shimmer (Category & Severity on left, Status on right)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: const [
+                  IncidentShimmerBox(height: 26, width: 90, borderRadius: 8),
+                  SizedBox(width: 8),
+                  IncidentShimmerBox(height: 26, width: 76, borderRadius: 8),
+                ],
+              ),
+              const IncidentShimmerBox(height: 26, width: 96, borderRadius: 12),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // 2. Incident Title Line Shimmer
           const IncidentShimmerBox(
             height: 26,
             width: 260,
             borderRadius: 6,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
-          // 2. Metadata Lines Shimmer
+          // 3. Metadata Lines Shimmer
           // Reporter + Time ago line
           Row(
             children: const [
-              IncidentShimmerBox.circle(size: 16),
-              SizedBox(width: 8),
-              IncidentShimmerBox(height: 13, width: 190, borderRadius: 4),
+              IncidentShimmerBox.circle(size: 15),
+              SizedBox(width: 6),
+              IncidentShimmerBox(height: 12, width: 190, borderRadius: 4),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
 
           // Clock + Timestamp line
           Row(
             children: const [
-              IncidentShimmerBox.circle(size: 16),
-              SizedBox(width: 8),
-              IncidentShimmerBox(height: 13, width: 140, borderRadius: 4),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // 3. Category & Severity Pill Badges Shimmer
-          Row(
-            children: const [
-              IncidentShimmerBox(height: 28, width: 100, borderRadius: 8),
-              SizedBox(width: 8),
-              IncidentShimmerBox(height: 28, width: 88, borderRadius: 8),
+              IncidentShimmerBox.circle(size: 15),
+              SizedBox(width: 6),
+              IncidentShimmerBox(height: 12, width: 140, borderRadius: 4),
             ],
           ),
           const SizedBox(height: 24),
 
-          // 4. Photo Preview Area Shimmer (Decoupled Image Carousel Box)
+          // 4. Incident Location Section Shimmer
+          const IncidentShimmerBox(height: 14, width: 130, borderRadius: 4),
+          const SizedBox(height: 8),
+          Row(
+            children: const [
+              IncidentShimmerBox.circle(size: 15),
+              SizedBox(width: 8),
+              IncidentShimmerBox(height: 13, width: 180, borderRadius: 4),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: const [
+              IncidentShimmerBox.circle(size: 15),
+              SizedBox(width: 8),
+              IncidentShimmerBox(height: 13, width: 220, borderRadius: 4),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // 5. Photo Preview Area Shimmer (Decoupled Image Carousel Box)
           const IncidentShimmerBox(
             height: 220,
             width: double.infinity,
             borderRadius: 14,
           ),
-          const SizedBox(height: 28),
-
-          // 5. Incident Location Section Shimmer
-          const IncidentShimmerBox(height: 14, width: 130, borderRadius: 4),
-          const SizedBox(height: 8),
-          const IncidentShimmerBox(
-            height: 72,
-            width: double.infinity,
-            borderRadius: 12,
-          ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
 
           // 6. Sequential Lifecycle Stepper Row Shimmer
           const IncidentShimmerBox(height: 14, width: 120, borderRadius: 4),
@@ -206,7 +222,15 @@ class IncidentDetailsSkeleton extends StatelessWidget {
           ),
           const SizedBox(height: 28),
 
-          // 8. Activity Timeline Section Shimmer
+          // 8. Allocated Resources Flat Shimmer
+          const IncidentShimmerBox(height: 14, width: 160, borderRadius: 4),
+          const SizedBox(height: 12),
+          const Center(child: IncidentShimmerBox.circle(size: 32)),
+          const SizedBox(height: 8),
+          const Center(child: IncidentShimmerBox(height: 12, width: 140, borderRadius: 4)),
+          const SizedBox(height: 28),
+
+          // 9. Activity Timeline Section Shimmer
           const IncidentShimmerBox(height: 14, width: 140, borderRadius: 4),
           const SizedBox(height: 12),
           const IncidentShimmerBox(

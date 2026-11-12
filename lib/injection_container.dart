@@ -15,6 +15,7 @@ import 'features/incidents/domain/services/media_service.dart';
 import 'features/incidents/presentation/bloc/incident_bloc.dart';
 import 'features/resources/data/repositories/resource_repository_impl.dart';
 import 'features/resources/domain/repositories/resource_repository.dart';
+import 'features/resources/presentation/cubit/resource_cubit.dart';
 
 final sl = GetIt.instance;
 
@@ -63,5 +64,8 @@ Future<void> initInjection() async {
   // -------------------------------------------------------------
   sl.registerLazySingleton<ResourceRepository>(
     () => ResourceRepositoryImpl(localDataSource: sl()),
+  );
+  sl.registerFactory<ResourceCubit>(
+    () => ResourceCubit(resourceRepository: sl()),
   );
 }

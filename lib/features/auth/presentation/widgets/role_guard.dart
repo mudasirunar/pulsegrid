@@ -40,7 +40,7 @@ class RoleGuard extends StatelessWidget {
     Key? key,
     required Widget child,
     Widget? fallback,
-    String? message = 'Viewers have read-only access.',
+    String? message = 'Action unavailable.',
   }) {
     return RoleGuard(
       key: key,

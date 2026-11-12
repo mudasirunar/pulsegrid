@@ -28,38 +28,78 @@ class IncidentLocationDisplay extends StatelessWidget {
     final hasGps = latitude != null && longitude != null;
     final hasNotes = manualLocationNotes != null && manualLocationNotes!.trim().isNotEmpty;
 
-    if (!hasGps && !hasNotes) {
-      return Text(
-        'No location recorded.',
-        style: TextStyle(
-          fontSize: 13,
-          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-        ),
-      );
-    }
-
     final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
     final secondaryTextColor = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final notesColor = hasGps ? secondaryTextColor : textColor;
+
+    if (!hasGps && !hasNotes) {
+      return Row(
+        children: [
+          Icon(
+            Icons.location_off_outlined,
+            size: 15,
+            color: secondaryTextColor,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'No location recorded.',
+            style: TextStyle(
+              fontSize: 13,
+              color: secondaryTextColor,
+            ),
+          ),
+        ],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (hasGps)
-          Text(
-            _formatCoordinates(latitude!, longitude!),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: textColor,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.my_location_rounded,
+                size: 15,
+                color: textColor,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _formatCoordinates(latitude!, longitude!),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
+              ),
+            ],
           ),
-        if (hasGps && hasNotes) const SizedBox(height: 4),
+        if (hasGps && hasNotes) const SizedBox(height: 6),
         if (hasNotes)
-          Text(
-            manualLocationNotes!.trim(),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              height: 1.4,
-              color: hasGps ? secondaryTextColor : textColor,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2.0),
+                child: Icon(
+                  Icons.location_on_rounded,
+                  size: 15,
+                  color: notesColor,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  manualLocationNotes!.trim(),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    height: 1.4,
+                    color: notesColor,
+                  ),
+                ),
+              ),
+            ],
           ),
       ],
     );

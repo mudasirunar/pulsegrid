@@ -12,6 +12,7 @@ import 'features/auth/presentation/screens/sign_in_screen.dart';
 import 'features/dashboard/presentation/screens/home_screen.dart';
 import 'features/incidents/presentation/bloc/incident_bloc.dart';
 import 'features/incidents/presentation/bloc/incident_event.dart';
+import 'features/resources/presentation/cubit/resource_cubit.dart';
 import 'injection_container.dart' as di;
 
 void main() async {
@@ -29,6 +30,9 @@ void main() async {
         ),
         BlocProvider(
           create: (_) => di.sl<IncidentBloc>()..add(const LoadIncidentsEvent()),
+        ),
+        BlocProvider(
+          create: (_) => di.sl<ResourceCubit>(),
         ),
       ],
       child: const PulseGridApp(),
