@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_image_viewer.dart';
 
 class IncidentPhotoPreview extends StatefulWidget {
   final List<String> photoPaths;
@@ -32,6 +33,14 @@ class _IncidentPhotoPreviewState extends State<IncidentPhotoPreview> {
     super.dispose();
   }
 
+  void _openImageViewer(int index) {
+    AppImageViewer.show(
+      context,
+      photoPaths: widget.photoPaths,
+      initialIndex: index,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -42,9 +51,33 @@ class _IncidentPhotoPreviewState extends State<IncidentPhotoPreview> {
     }
 
     if (photos.length == 1) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: _buildSingleImage(photos.first, isDark),
+      return GestureDetector(
+        onTap: () => _openImageViewer(0),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Stack(
+            alignment: Alignment.topRight,
+            children: [
+              _buildSingleImage(photos.first, isDark),
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    Icons.fullscreen_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -62,26 +95,43 @@ class _IncidentPhotoPreviewState extends State<IncidentPhotoPreview> {
                   itemCount: photos.length,
                   onPageChanged: (idx) => setState(() => _currentIndex = idx),
                   itemBuilder: (context, index) {
-                    return _buildSingleImage(photos[index], isDark);
+                    return GestureDetector(
+                      onTap: () => _openImageViewer(index),
+                      child: _buildSingleImage(photos[index], isDark),
+                    );
                   },
                 ),
               ),
-              // Index counter pill
+              // Index counter pill + Fullscreen icon
               Positioned(
                 top: 10,
                 right: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.65),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${_currentIndex + 1} / ${photos.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                child: GestureDetector(
+                  onTap: () => _openImageViewer(_currentIndex),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.fullscreen_rounded,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${_currentIndex + 1} / ${photos.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

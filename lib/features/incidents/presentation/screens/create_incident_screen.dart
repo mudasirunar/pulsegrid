@@ -8,6 +8,7 @@ import '../../../../core/network/network_info.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_dialog.dart';
+import '../../../../core/widgets/app_image_viewer.dart';
 import '../../../../core/widgets/app_snackbar.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../injection_container.dart';
@@ -1040,22 +1041,29 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
                           child: Stack(
                             alignment: Alignment.topRight,
                             children: [
-                              Image.file(
-                                File(path),
-                                height: 120,
-                                width: 120,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Container(
-                                      height: 120,
-                                      width: 120,
-                                      color: Colors.grey.withValues(alpha: 0.2),
-                                      alignment: Alignment.center,
-                                      child: const Icon(
-                                        Icons.broken_image,
-                                        size: 28,
+                              GestureDetector(
+                                onTap: () => AppImageViewer.show(
+                                  context,
+                                  photoPaths: _photoPaths,
+                                  initialIndex: index,
+                                ),
+                                child: Image.file(
+                                  File(path),
+                                  height: 120,
+                                  width: 120,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(
+                                        height: 120,
+                                        width: 120,
+                                        color: Colors.grey.withValues(alpha: 0.2),
+                                        alignment: Alignment.center,
+                                        child: const Icon(
+                                          Icons.broken_image,
+                                          size: 28,
+                                        ),
                                       ),
-                                    ),
+                                ),
                               ),
                               Padding(
                                 padding: const EdgeInsets.all(4.0),
