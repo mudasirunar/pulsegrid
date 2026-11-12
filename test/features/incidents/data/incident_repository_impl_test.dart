@@ -119,6 +119,18 @@ class _InMemoryLocalDataSource implements LocalDataSource {
   Future<int> getPendingSyncCount() async => syncOps.length;
 
   @override
+  Future<List<SyncOperationModel>> getAllSyncOperations() async => syncOps;
+
+  @override
+  Future<int> getFailedSyncCount() async =>
+      syncOps.where((o) => o.syncState == 'FAILED').length;
+
+  @override
+  Future<void> clearSyncedOperations() async {
+    syncOps.removeWhere((o) => o.syncState == 'SYNCED');
+  }
+
+  @override
   Future<void> removeSyncOperation(String operationId) async {
     syncOps.removeWhere((o) => o.operationId == operationId);
   }

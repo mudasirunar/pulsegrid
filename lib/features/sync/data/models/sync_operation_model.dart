@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../../../core/database/database_constants.dart';
+import '../../domain/entities/sync_operation_entity.dart';
 
 class SyncOperationModel extends Equatable {
   final String operationId;
@@ -23,6 +24,34 @@ class SyncOperationModel extends Equatable {
     this.errorMessage,
     required this.createdAt,
   });
+
+  SyncOperationEntity toEntity() {
+    return SyncOperationEntity(
+      operationId: operationId,
+      entityId: entityId,
+      entityType: SyncEntityType.fromString(entityType),
+      operationType: SyncOperationType.fromString(operationType),
+      payload: payload,
+      retryCount: retryCount,
+      status: SyncStatus.fromString(syncState),
+      errorMessage: errorMessage,
+      createdAt: createdAt,
+    );
+  }
+
+  factory SyncOperationModel.fromEntity(SyncOperationEntity entity) {
+    return SyncOperationModel(
+      operationId: entity.operationId,
+      entityId: entity.entityId,
+      entityType: entity.entityType.toDbValue(),
+      operationType: entity.operationType.toDbValue(),
+      payload: entity.payload,
+      retryCount: entity.retryCount,
+      syncState: entity.status.toDbValue(),
+      errorMessage: entity.errorMessage,
+      createdAt: entity.createdAt,
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {

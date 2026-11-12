@@ -16,6 +16,10 @@ import 'features/incidents/presentation/bloc/incident_bloc.dart';
 import 'features/resources/data/repositories/resource_repository_impl.dart';
 import 'features/resources/domain/repositories/resource_repository.dart';
 import 'features/resources/presentation/cubit/resource_cubit.dart';
+import 'features/sync/data/repositories/sync_repository_impl.dart';
+import 'features/sync/domain/repositories/sync_repository.dart';
+import 'features/sync/domain/services/sync_queue_manager.dart';
+import 'features/sync/presentation/bloc/sync_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -67,5 +71,18 @@ Future<void> initInjection() async {
   );
   sl.registerFactory<ResourceCubit>(
     () => ResourceCubit(resourceRepository: sl()),
+  );
+
+  // -------------------------------------------------------------
+  // Sync Engine & Queue Feature
+  // -------------------------------------------------------------
+  sl.registerLazySingleton<SyncRepository>(
+    () => SyncRepositoryImpl(localDataSource: sl()),
+  );
+  sl.registerLazySingleton<SyncQueueManager>(
+    () => SyncQueueManager(syncRepository: sl()),
+  );
+  sl.registerFactory<SyncBloc>(
+    () => SyncBloc(syncQueueManager: sl()),
   );
 }

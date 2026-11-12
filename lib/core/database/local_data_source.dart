@@ -40,6 +40,7 @@ abstract class LocalDataSource {
   // Sync Operations
   Future<void> enqueueSyncOperation(SyncOperationModel operation);
   Future<List<SyncOperationModel>> getPendingSyncOperations();
+  Future<List<SyncOperationModel>> getAllSyncOperations();
   Future<void> updateSyncOperationState(
     String operationId,
     String newState, {
@@ -47,7 +48,9 @@ abstract class LocalDataSource {
     int? retryCount,
   });
   Future<int> getPendingSyncCount();
+  Future<int> getFailedSyncCount();
   Future<void> removeSyncOperation(String operationId);
+  Future<void> clearSyncedOperations();
 }
 
 class LocalDataSourceImpl implements LocalDataSource {
@@ -363,6 +366,16 @@ class LocalDataSourceImpl implements LocalDataSource {
   }
 
   @override
+  Future<List<SyncOperationModel>> getAllSyncOperations() async {
+    final db = await _db;
+    final results = await db.query(
+      DatabaseConstants.tableSyncOperations,
+      orderBy: '${DatabaseConstants.colCreatedAt} ASC',
+    );
+    return results.map(SyncOperationModel.fromMap).toList();
+  }
+
+  @override
   Future<int> getPendingSyncCount() async {
     final db = await _db;
     final count = Sqflite.firstIntValue(
@@ -375,12 +388,34 @@ class LocalDataSourceImpl implements LocalDataSource {
   }
 
   @override
+  Future<int> getFailedSyncCount() async {
+    final db = await _db;
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery(
+        'SELECT COUNT(*) FROM ${DatabaseConstants.tableSyncOperations} WHERE ${DatabaseConstants.colSyncState} = ?',
+        ['FAILED'],
+      ),
+    );
+    return count ?? 0;
+  }
+
+  @override
   Future<void> removeSyncOperation(String operationId) async {
     final db = await _db;
     await db.delete(
       DatabaseConstants.tableSyncOperations,
       where: '${DatabaseConstants.colOperationId} = ?',
       whereArgs: [operationId],
+    );
+  }
+
+  @override
+  Future<void> clearSyncedOperations() async {
+    final db = await _db;
+    await db.delete(
+      DatabaseConstants.tableSyncOperations,
+      where: '${DatabaseConstants.colSyncState} = ?',
+      whereArgs: ['SYNCED'],
     );
   }
 }
