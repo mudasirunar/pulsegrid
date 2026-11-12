@@ -142,6 +142,9 @@ class _MockRepo implements IncidentRepository {
   IncidentEntity? lastCreated;
 
   @override
+  Stream<void> get onIncidentsChanged => const Stream.empty();
+
+  @override
   Future<IncidentEntity> createIncident(IncidentEntity incident) async {
     lastCreated = incident;
     return incident;
@@ -210,7 +213,7 @@ void main() {
     );
   }
 
-  testWidgets('Validation: shows error on empty title & description and clears on typing',
+  testWidgets('Validation: shows error only on empty title and clears on typing',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1.0;
@@ -227,16 +230,43 @@ void main() {
     await tester.tap(find.text('Report Incident'));
     await tester.pump();
 
-    // Error text shown
+    // Only title error is shown (description is optional)
     expect(find.text('Incident title is required'), findsOneWidget);
-    expect(find.text('Operational description is required'), findsOneWidget);
+    expect(find.text('Operational description is required'), findsNothing);
 
     // Type in title -> error clears
     await tester.enterText(find.byType(TextField).first, 'Transformer Explosion');
     await tester.pump();
 
     expect(find.text('Incident title is required'), findsNothing);
-    expect(find.text('Operational description is required'), findsOneWidget);
+  });
+
+  testWidgets('Validation: smoothly scrolls to top when title error occurs while scrolled down',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(400, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    // Drag up to scroll down to the submit button
+    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+
+    final scrollable =
+        tester.state<ScrollableState>(find.byType(Scrollable).first);
+    expect(scrollable.position.pixels, greaterThan(0));
+
+    // Tap submit with empty title
+    final submitFinder = find.text('Report Incident');
+    await tester.tap(submitFinder);
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    // Error is visible and screen has smoothly scrolled back to top
+    expect(find.text('Incident title is required'), findsOneWidget);
+    expect(scrollable.position.pixels, equals(0.0));
   });
 
   testWidgets('GPS capture: fetches coordinates and fills location display with reverse-geocoded address',

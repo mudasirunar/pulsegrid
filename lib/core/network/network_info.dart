@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 abstract class NetworkInfo {
@@ -15,14 +13,7 @@ class NetworkInfoImpl implements NetworkInfo {
   @override
   Future<bool> get isConnected async {
     final results = await connectivity.checkConnectivity();
-    if (!_hasConnection(results)) return false;
-    try {
-      final lookup = await InternetAddress.lookup('dns.google')
-          .timeout(const Duration(milliseconds: 1200));
-      return lookup.isNotEmpty && lookup[0].rawAddress.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
+    return _hasConnection(results);
   }
 
   @override

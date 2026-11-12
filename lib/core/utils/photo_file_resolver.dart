@@ -100,18 +100,22 @@ class PhotoFileResolver {
   }
 
   /// Saves a remote Base64 image payload into local permanent documents storage
-  /// and returns the local file path.
+  /// and returns the local file path. Uses a deterministic content-based filename
+  /// so identical images are never re-decoded or duplicated on disk.
   static Future<String?> saveBase64Photo(String base64String) async {
     try {
-      final bytes = base64Decode(base64String);
       final docsDir = await getDocsDir();
       final photosDir = Directory('${docsDir.path}/incident_photos');
       if (!await photosDir.exists()) {
         await photosDir.create(recursive: true);
       }
       final fileName =
-          'evidence_remote_${DateTime.now().millisecondsSinceEpoch}_${base64String.hashCode.abs()}.jpg';
+          'evidence_remote_${base64String.length}_${base64String.hashCode.abs()}.jpg';
       final file = File('${photosDir.path}/$fileName');
+      if (await file.exists()) {
+        return file.path;
+      }
+      final bytes = base64Decode(base64String);
       await file.writeAsBytes(bytes);
       return file.path;
     } catch (_) {

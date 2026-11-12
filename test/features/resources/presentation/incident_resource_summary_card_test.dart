@@ -14,6 +14,9 @@ class _FakeResourceRepository implements ResourceRepository {
   List<ResourceLogEntity> stubbedLogs = [];
 
   @override
+  Stream<void> get onResourcesChanged => const Stream.empty();
+
+  @override
   Future<ResourceLogEntity> logResource({
     required String incidentId,
     required String resourceType,

@@ -15,15 +15,17 @@ class LoadIncidentsEvent extends IncidentEvent {
   final IncidentStatus? statusFilter;
   final IncidentSeverity? severityFilter;
   final String? searchQuery;
+  final bool isQuiet;
 
   const LoadIncidentsEvent({
     this.statusFilter,
     this.severityFilter,
     this.searchQuery,
+    this.isQuiet = false,
   });
 
   @override
-  List<Object?> get props => [statusFilter, severityFilter, searchQuery];
+  List<Object?> get props => [statusFilter, severityFilter, searchQuery, isQuiet];
 }
 
 class CreateIncidentEvent extends IncidentEvent {

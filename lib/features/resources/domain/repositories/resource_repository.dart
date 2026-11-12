@@ -3,6 +3,9 @@ import '../entities/resource_summary_item.dart';
 
 /// Contract for Resource Logging and Aggregation per PRD §4.2.
 abstract class ResourceRepository {
+  /// Emits whenever resource logs are created or updated.
+  Stream<void> get onResourcesChanged;
+
   /// Records a new resource log for an incident.
   /// Validates quantity > 0 and required fields.
   /// Automatically logs an ActivityEvent and enqueues a SyncOperation.

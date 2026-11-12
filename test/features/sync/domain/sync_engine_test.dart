@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pulsegrid/core/database/database_constants.dart';
 import 'package:pulsegrid/core/database/local_data_source.dart';
 import 'package:pulsegrid/core/network/network_info.dart';
 import 'package:pulsegrid/features/incidents/data/models/activity_event_model.dart';
@@ -44,6 +45,30 @@ class _FakeFirestoreRemoteDataSource implements FirestoreRemoteDataSource {
   List<Map<String, dynamic>> stubbedRemoteIncidents = [];
   List<Map<String, dynamic>> stubbedRemoteResources = [];
   List<Map<String, dynamic>> stubbedRemoteEvents = [];
+
+  final StreamController<List<Map<String, dynamic>>> incidentsController =
+      StreamController<List<Map<String, dynamic>>>.broadcast();
+  final StreamController<Map<String, dynamic>?> singleIncidentController =
+      StreamController<Map<String, dynamic>?>.broadcast();
+  final StreamController<List<Map<String, dynamic>>> resourcesController =
+      StreamController<List<Map<String, dynamic>>>.broadcast();
+  final StreamController<List<Map<String, dynamic>>> eventsController =
+      StreamController<List<Map<String, dynamic>>>.broadcast();
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchIncidents() => incidentsController.stream;
+
+  @override
+  Stream<Map<String, dynamic>?> watchIncident(String incidentId) =>
+      singleIncidentController.stream;
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchResourceLogs(String incidentId) =>
+      resourcesController.stream;
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchActivityEvents(String incidentId) =>
+      eventsController.stream;
 
   @override
   Future<void> pushIncident(Map<String, dynamic> incidentData) async {
@@ -89,6 +114,11 @@ class _FakeLocalDataSource implements LocalDataSource {
   final Map<String, IncidentModel> incidents = {};
   final List<ResourceLogModel> resources = [];
   final List<ActivityEventModel> events = [];
+  final StreamController<String> tableChangeController =
+      StreamController<String>.broadcast();
+
+  @override
+  Stream<String> get onTableChanged => tableChangeController.stream;
 
   @override
   Future<void> saveIncident(IncidentModel incident) async {
@@ -374,5 +404,97 @@ void main() {
     expect(saved, isNotNull);
     expect(saved!.title, 'Wildfire Alert');
     expect(saved.version, 2);
+  });
+
+  test('live WebSocket stream from Firestore mirrors incoming remote incidents into SQLite', () async {
+    await syncEngine.initialize();
+
+    // Remote Firestore emits a new incident via snapshot WebSocket stream
+    fakeRemote.incidentsController.add([
+      {
+        'id': 'ws-inc-1',
+        'title': 'Chemical Leak Detected',
+        'category': 'Hazmat',
+        'severity': 'Critical',
+        'description': 'Toxic fumes in Sector B',
+        'status': 'New',
+        'version': 1,
+        'createdBy': 'user-remote',
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      }
+    ]);
+    await pumpEventQueue();
+
+    final localIncident = fakeLocal.incidents['ws-inc-1'];
+    expect(localIncident, isNotNull);
+    expect(localIncident!.title, 'Chemical Leak Detected');
+    expect(localIncident.category, 'Hazmat');
+  });
+
+  test('scoped watchIncidentDetails mirrors remote resource logs and activity events into SQLite', () async {
+    final scopedSub = syncEngine.watchIncidentDetails('inc-100');
+
+    // Remote emits resource log for inc-100
+    fakeRemote.resourcesController.add([
+      {
+        'id': 'res-live-1',
+        'incidentId': 'inc-100',
+        'resourceType': 'Water',
+        'quantity': 50.0,
+        'unit': 'Liters',
+        'notes': 'Delivered by drone',
+        'loggedBy': 'pilot-1',
+        'createdAt': DateTime.now().toIso8601String(),
+      }
+    ]);
+
+    // Remote emits activity event for inc-100
+    fakeRemote.eventsController.add([
+      {
+        'id': 'evt-live-1',
+        'incidentId': 'inc-100',
+        'actorId': 'pilot-1',
+        'eventType': 'RESOURCE_LOGGED',
+        'oldValue': null,
+        'newValue': '50 Liters of Water',
+        'timestamp': DateTime.now().toIso8601String(),
+      }
+    ]);
+    await pumpEventQueue();
+
+    expect(fakeLocal.resources.length, 1);
+    expect(fakeLocal.resources.first.id, 'res-live-1');
+    expect(fakeLocal.resources.first.quantity, 50.0);
+
+    expect(fakeLocal.events.length, 1);
+    expect(fakeLocal.events.first.id, 'evt-live-1');
+
+    await scopedSub.cancel();
+  });
+
+  test('enqueuing a sync operation triggers immediate outbound push in background', () async {
+    fakeNetwork.connected = true;
+    await syncEngine.initialize();
+
+    await fakeSyncRepo.enqueueOperation(
+      SyncOperationEntity(
+        operationId: 'op-auto-push-1',
+        entityId: 'inc-auto-1',
+        entityType: SyncEntityType.incident,
+        operationType: SyncOperationType.create,
+        payload: jsonEncode({'id': 'inc-auto-1', 'title': 'Flash Flood'}),
+        status: SyncStatus.pending,
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    // Emitting tableSyncOperations on SQLite change stream triggers push
+    fakeLocal.tableChangeController.add(DatabaseConstants.tableSyncOperations);
+    await pumpEventQueue();
+
+    expect(fakeRemote.pushedIncidents.length, 1);
+    expect(fakeRemote.pushedIncidents.first['id'], 'inc-auto-1');
+    expect(fakeSyncRepo.ops.first.status, SyncStatus.synced);
   });
 }

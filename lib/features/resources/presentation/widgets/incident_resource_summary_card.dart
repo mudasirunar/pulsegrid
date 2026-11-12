@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/domain/entities/user_role.dart';
+import '../../../incidents/presentation/widgets/incident_details_skeleton.dart';
 import '../../domain/entities/resource_log_entity.dart';
 import '../cubit/resource_cubit.dart';
 import '../cubit/resource_state.dart';
@@ -230,19 +231,19 @@ class _IncidentResourceSummaryCardState extends State<IncidentResourceSummaryCar
             ),
             const SizedBox(height: 12),
 
-            // 2. Loading State
+            // 2. Loading State (Shimmer Skeleton placeholder)
             if (isLoading && logs.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
-                    ),
-                  ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    IncidentShimmerBox(height: 20, width: double.infinity, borderRadius: 6),
+                    SizedBox(height: 10),
+                    IncidentShimmerBox(height: 20, width: 220, borderRadius: 6),
+                    SizedBox(height: 10),
+                    IncidentShimmerBox(height: 20, width: 180, borderRadius: 6),
+                  ],
                 ),
               )
             // 3. Flat Empty State (No card container, no border)

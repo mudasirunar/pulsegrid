@@ -14,6 +14,9 @@ import 'package:pulsegrid/features/incidents/presentation/widgets/incident_detai
 
 class _MockRepo implements IncidentRepository {
   @override
+  Stream<void> get onIncidentsChanged => const Stream.empty();
+
+  @override
   Future<List<IncidentEntity>> getIncidents({
     IncidentStatus? statusFilter,
     IncidentSeverity? severityFilter,

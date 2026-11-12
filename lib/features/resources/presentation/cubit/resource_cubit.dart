@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/repositories/resource_repository.dart';
@@ -5,11 +6,20 @@ import 'resource_state.dart';
 
 class ResourceCubit extends Cubit<ResourceState> {
   final ResourceRepository resourceRepository;
+  StreamSubscription<void>? _resourceSub;
+  String? _activeIncidentId;
 
-  ResourceCubit({required this.resourceRepository}) : super(const ResourceInitial());
+  ResourceCubit({required this.resourceRepository}) : super(const ResourceInitial()) {
+    _resourceSub = resourceRepository.onResourcesChanged.listen((_) {
+      if (_activeIncidentId != null && state is! ResourceLoggingInProgress) {
+        _reloadSilently(_activeIncidentId!);
+      }
+    });
+  }
 
   /// Loads aggregated summary and full logs for the incident
   Future<void> loadResources(String incidentId) async {
+    _activeIncidentId = incidentId;
     emit(const ResourceLoading());
     try {
       final summary = await resourceRepository.getResourceSummary(incidentId);
@@ -18,6 +28,14 @@ class ResourceCubit extends Cubit<ResourceState> {
     } catch (e) {
       emit(ResourceError(message: e.toString()));
     }
+  }
+
+  Future<void> _reloadSilently(String incidentId) async {
+    try {
+      final summary = await resourceRepository.getResourceSummary(incidentId);
+      final logs = await resourceRepository.getResourceLogs(incidentId);
+      emit(ResourceLoaded(summary: summary, logs: logs));
+    } catch (_) {}
   }
 
   /// Logs a new resource entry and refreshes data
@@ -83,6 +101,12 @@ class ResourceCubit extends Cubit<ResourceState> {
       ));
       return false;
     }
+  }
+
+  @override
+  Future<void> close() {
+    _resourceSub?.cancel();
+    return super.close();
   }
 }
 

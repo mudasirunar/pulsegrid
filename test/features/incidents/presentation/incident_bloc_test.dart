@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulsegrid/features/auth/domain/entities/user_entity.dart';
 import 'package:pulsegrid/features/auth/domain/entities/user_role.dart';
@@ -12,6 +13,11 @@ import 'package:pulsegrid/features/incidents/presentation/bloc/incident_state.da
 
 class _MockRepo implements IncidentRepository {
   final List<IncidentEntity> items = [];
+  final StreamController<void> incidentsChangedController =
+      StreamController<void>.broadcast();
+
+  @override
+  Stream<void> get onIncidentsChanged => incidentsChangedController.stream;
 
   @override
   Future<IncidentEntity> createIncident(IncidentEntity incident) async {
@@ -82,12 +88,10 @@ void main() {
     bloc.add(const LoadIncidentsEvent());
   });
 
-  test('CreateIncidentEvent creates incident and refreshes list', () async {
+  test('CreateIncidentEvent creates incident successfully', () async {
     final expectedStates = [
       isA<IncidentCreating>(),
       isA<IncidentCreatedSuccess>(),
-      isA<IncidentLoading>(),
-      isA<IncidentLoaded>(),
     ];
 
     expectLater(bloc.stream, emitsInOrder(expectedStates));
@@ -101,6 +105,50 @@ void main() {
         creator: user,
       ),
     );
+  });
+
+  test('onIncidentsChanged triggers quiet refresh without emitting IncidentLoading', () async {
+    final newIncident = IncidentEntity(
+      id: 'inc-bg-1',
+      title: 'Power Outage',
+      category: 'Infrastructure',
+      severity: IncidentSeverity.medium,
+      description: 'Grid failure',
+      status: IncidentStatus.newIncident,
+      version: 1,
+      createdBy: 'user-test',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    repository.items.add(newIncident);
+
+    // Initial load
+    bloc.add(const LoadIncidentsEvent());
+    await pumpEventQueue();
+    expect((bloc.state as IncidentLoaded).incidents.length, 1);
+
+    // Another incident added by background sync
+    final secondIncident = IncidentEntity(
+      id: 'inc-bg-2',
+      title: 'Water Main Break',
+      category: 'Infrastructure',
+      severity: IncidentSeverity.low,
+      description: 'Street flooding',
+      status: IncidentStatus.newIncident,
+      version: 1,
+      createdBy: 'user-test',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    repository.items.add(secondIncident);
+
+    // Repository emits onIncidentsChanged
+    repository.incidentsChangedController.add(null);
+    await pumpEventQueue();
+
+    // Bloc updates state quietly
+    expect(bloc.state, isA<IncidentLoaded>());
+    expect((bloc.state as IncidentLoaded).incidents.length, 2);
   });
 }
 

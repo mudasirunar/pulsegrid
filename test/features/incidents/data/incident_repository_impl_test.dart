@@ -18,6 +18,9 @@ class _InMemoryLocalDataSource implements LocalDataSource {
   final List<SyncOperationModel> syncOps = [];
 
   @override
+  Stream<String> get onTableChanged => const Stream.empty();
+
+  @override
   Future<void> saveIncident(IncidentModel incident) async {
     incidents[incident.id] = incident;
   }
@@ -179,11 +182,12 @@ void main() {
     expect(localDataSource.activityEvents.first.eventType, 'INCIDENT_CREATED');
     expect(localDataSource.activityEvents.first.incidentId, 'inc_test_1');
 
-    // Verify sync queue
-    expect(localDataSource.syncOps.length, 1);
+    // Verify sync queue (INCIDENT + ACTIVITY_EVENT)
+    expect(localDataSource.syncOps.length, 2);
     expect(localDataSource.syncOps.first.entityId, 'inc_test_1');
     expect(localDataSource.syncOps.first.operationType, 'INSERT');
     expect(localDataSource.syncOps.first.syncState, 'PENDING');
+    expect(localDataSource.syncOps[1].entityType, 'ACTIVITY_EVENT');
   });
 
   test('updateIncidentStatus executes state machine, updates SQLite, and logs transition event', () async {
@@ -220,8 +224,9 @@ void main() {
     expect(timeline.last.oldValue, 'New');
     expect(timeline.last.newValue, 'Assigned');
 
-    // Verify sync ops has 2 (INSERT + UPDATE)
-    expect(localDataSource.syncOps.length, 2);
+    // Verify sync ops has 4 (INSERT INCIDENT + CREATE EVENT + STATUS_CHANGE EVENT + UPDATE INCIDENT)
+    expect(localDataSource.syncOps.length, 4);
+    expect(localDataSource.syncOps[2].entityType, 'ACTIVITY_EVENT');
     expect(localDataSource.syncOps.last.operationType, 'UPDATE');
   });
 }

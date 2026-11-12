@@ -33,14 +33,28 @@ class ActivityEventModel extends Equatable {
   }
 
   factory ActivityEventModel.fromMap(Map<String, dynamic> map) {
+    DateTime parseDate(dynamic val) {
+      if (val is DateTime) return val;
+      if (val != null) {
+        try {
+          final dynamic dyn = val;
+          return dyn.toDate() as DateTime;
+        } catch (_) {}
+        try {
+          return DateTime.parse(val.toString());
+        } catch (_) {}
+      }
+      return DateTime.now();
+    }
+
     return ActivityEventModel(
-      id: map[DatabaseConstants.colId] as String,
-      incidentId: map[DatabaseConstants.colIncidentId] as String,
-      actorId: map[DatabaseConstants.colActorId] as String,
-      eventType: map[DatabaseConstants.colEventType] as String,
-      oldValue: map[DatabaseConstants.colOldValue] as String?,
-      newValue: map[DatabaseConstants.colNewValue] as String?,
-      timestamp: DateTime.parse(map[DatabaseConstants.colTimestamp] as String),
+      id: (map[DatabaseConstants.colId] ?? '').toString(),
+      incidentId: (map[DatabaseConstants.colIncidentId] ?? '').toString(),
+      actorId: (map[DatabaseConstants.colActorId] ?? '').toString(),
+      eventType: (map[DatabaseConstants.colEventType] ?? '').toString(),
+      oldValue: map[DatabaseConstants.colOldValue]?.toString(),
+      newValue: map[DatabaseConstants.colNewValue]?.toString(),
+      timestamp: parseDate(map[DatabaseConstants.colTimestamp]),
     );
   }
 

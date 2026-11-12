@@ -131,9 +131,9 @@ class MediaServiceImpl implements MediaService {
     try {
       final photo = await _picker.pickImage(
         source: ImageSource.camera,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 70,
+        maxWidth: 720,
+        maxHeight: 720,
+        imageQuality: 55,
       );
       if (photo == null) return null;
       return await PhotoFileResolver.persistPickedFile(photo.path);
@@ -147,9 +147,9 @@ class MediaServiceImpl implements MediaService {
     try {
       final image = await _picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 70,
+        maxWidth: 720,
+        maxHeight: 720,
+        imageQuality: 55,
       );
       if (image == null) return null;
       return await PhotoFileResolver.persistPickedFile(image.path);
@@ -163,9 +163,9 @@ class MediaServiceImpl implements MediaService {
     try {
       final images = await _picker.pickMultiImage(
         limit: maxImages,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 70,
+        maxWidth: 720,
+        maxHeight: 720,
+        imageQuality: 55,
       );
       final persisted = <String>[];
       for (final img in images) {

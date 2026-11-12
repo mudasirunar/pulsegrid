@@ -13,6 +13,9 @@ class _FakeResourceRepo implements ResourceRepository {
   ResourceLogEntity? lastLogged;
 
   @override
+  Stream<void> get onResourcesChanged => const Stream.empty();
+
+  @override
   Future<ResourceLogEntity> logResource({
     required String incidentId,
     required String resourceType,

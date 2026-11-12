@@ -5,6 +5,8 @@ import '../entities/incident_severity.dart';
 import '../entities/incident_status.dart';
 
 abstract class IncidentRepository {
+  Stream<void> get onIncidentsChanged;
+
   Future<List<IncidentEntity>> getIncidents({
     IncidentStatus? statusFilter,
     IncidentSeverity? severityFilter,

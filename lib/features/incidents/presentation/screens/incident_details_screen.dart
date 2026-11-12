@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/database/database_constants.dart';
+import '../../../../core/database/local_data_source.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_snackbar.dart';
 import '../../../../injection_container.dart' as di;
@@ -10,6 +13,7 @@ import '../../../resources/domain/entities/resource_summary_item.dart';
 import '../../../resources/domain/repositories/resource_repository.dart';
 import '../../../resources/presentation/cubit/resource_cubit.dart';
 import '../../../resources/presentation/widgets/incident_resource_summary_card.dart';
+import '../../../sync/domain/services/sync_engine.dart';
 import '../../domain/entities/activity_event_entity.dart';
 import '../../domain/entities/incident_entity.dart';
 import '../../domain/entities/incident_severity.dart';
@@ -51,6 +55,9 @@ class _FallbackResourceRepository implements ResourceRepository {
   const _FallbackResourceRepository();
 
   @override
+  Stream<void> get onResourcesChanged => const Stream.empty();
+
+  @override
   Future<ResourceLogEntity> logResource({
     required String incidentId,
     required String resourceType,
@@ -76,6 +83,8 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
   bool _isLoadingTimeline = true;
   late final ResourceCubit _resourceCubit;
   bool _ownsCubit = false;
+  ScopedIncidentSubscription? _scopedSyncSubscription;
+  StreamSubscription<String>? _tableSubscription;
 
   @override
   void initState() {
@@ -96,20 +105,68 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
 
     _incident = widget.incident;
     _isLoadingIncident = widget.isLoading || _incident == null;
+    final incId = widget.incident?.id ?? widget.incidentId;
+
     if (!_isLoadingIncident && _incident != null) {
       _fetchTimeline();
       _resourceCubit.loadResources(_incident!.id);
     } else if (widget.incidentId != null) {
       _fetchIncidentById(widget.incidentId!);
     }
+
+    // Scoped live WebSocket listener: mirrors remote resource logs & events into SQLite
+    if (incId != null && di.sl.isRegistered<SyncEngine>()) {
+      _scopedSyncSubscription = di.sl<SyncEngine>().watchIncidentDetails(incId);
+    }
+
+    // Local reactive listener: re-renders timeline or incident quietly on SQLite updates
+    if (di.sl.isRegistered<LocalDataSource>()) {
+      _tableSubscription = di.sl<LocalDataSource>().onTableChanged.listen((table) {
+        if (!mounted) return;
+        if (table == DatabaseConstants.tableActivityEvents) {
+          _fetchTimelineQuietly();
+        } else if (table == DatabaseConstants.tableIncidents && incId != null) {
+          _refreshIncidentQuietly(incId);
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
+    _scopedSyncSubscription?.cancel();
+    _tableSubscription?.cancel();
     if (_ownsCubit) {
       _resourceCubit.close();
     }
     super.dispose();
+  }
+
+  Future<void> _fetchTimelineQuietly() async {
+    final currentIncident = _incident;
+    if (currentIncident == null) return;
+    try {
+      final repo = context.read<IncidentBloc>().incidentRepository;
+      final events = await repo.getActivityTimeline(currentIncident.id);
+      if (mounted) {
+        setState(() {
+          _timeline = events;
+          _isLoadingTimeline = false;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _refreshIncidentQuietly(String id) async {
+    try {
+      final repo = context.read<IncidentBloc>().incidentRepository;
+      final fetched = await repo.getIncidentById(id);
+      if (mounted && fetched != null) {
+        setState(() {
+          _incident = fetched;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchIncidentById(String id) async {
@@ -232,6 +289,14 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
             );
             setState(() => _incident = updated);
             _fetchTimeline();
+          } else if (state is IncidentLoaded) {
+            final updated = state.incidents.firstWhere(
+              (inc) => inc.id == currentIncident.id,
+              orElse: () => currentIncident,
+            );
+            if (updated != _incident) {
+              setState(() => _incident = updated);
+            }
           } else if (state is IncidentOperationFailure) {
             AppSnackBar.show(
               context,
@@ -462,9 +527,17 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  currentIncident.description,
+                  currentIncident.description.trim().isEmpty
+                      ? 'No description provided'
+                      : currentIncident.description,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     height: 1.5,
+                    fontStyle: currentIncident.description.trim().isEmpty
+                        ? FontStyle.italic
+                        : FontStyle.normal,
+                    color: currentIncident.description.trim().isEmpty
+                        ? (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight)
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 24),

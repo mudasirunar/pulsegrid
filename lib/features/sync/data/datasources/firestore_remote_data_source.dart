@@ -12,10 +12,17 @@ abstract class FirestoreRemoteDataSource {
   Future<List<Map<String, dynamic>>> pullResourceLogs({String? incidentId});
   Future<List<Map<String, dynamic>>> pullActivityEvents({String? incidentId});
   Future<Map<String, dynamic>?> getRemoteIncident(String incidentId);
+
+  // Live WebSocket snapshot streams (zero polling, quota safe)
+  Stream<List<Map<String, dynamic>>> watchIncidents();
+  Stream<Map<String, dynamic>?> watchIncident(String incidentId);
+  Stream<List<Map<String, dynamic>>> watchResourceLogs(String incidentId);
+  Stream<List<Map<String, dynamic>>> watchActivityEvents(String incidentId);
 }
 
 class FirestoreRemoteDataSourceImpl implements FirestoreRemoteDataSource {
   final FirebaseFirestore firestore;
+  final Map<String, String> _pushedPhotoSignatures = {};
 
   FirestoreRemoteDataSourceImpl({required this.firestore});
 
@@ -52,19 +59,29 @@ class FirestoreRemoteDataSourceImpl implements FirestoreRemoteDataSource {
       }
     }
 
-    final List<String> base64Photos = [];
-    for (final path in photoPaths) {
-      if (path.length > 200 && !path.contains('/') && !path.contains('\\')) {
-        // Already a base64 string
-        base64Photos.add(path);
-      } else {
-        final b64 = await PhotoFileResolver.photoPathToBase64(path);
-        if (b64 != null) {
+    final photoSignature = photoPaths.join('|');
+    if (photoPaths.isNotEmpty && _pushedPhotoSignatures[docId] != photoSignature) {
+      final List<String> base64Photos = [];
+      int totalChars = 0;
+      const int maxTotalChars = 750000; // Keep well under Firestore 1 MiB document limit
+
+      for (final path in photoPaths) {
+        String? b64;
+        if (path.length > 200 && !path.contains('/') && !path.contains('\\')) {
+          b64 = path;
+        } else {
+          b64 = await PhotoFileResolver.photoPathToBase64(path);
+        }
+        if (b64 != null && (totalChars + b64.length) <= maxTotalChars) {
           base64Photos.add(b64);
+          totalChars += b64.length;
         }
       }
+      if (base64Photos.isNotEmpty) {
+        copy['photoBase64s'] = base64Photos;
+        _pushedPhotoSignatures[docId] = photoSignature;
+      }
     }
-    copy['photoBase64s'] = base64Photos;
 
     // Normalize timestamps
     copy['syncedAt'] = FieldValue.serverTimestamp();
@@ -160,4 +177,105 @@ class FirestoreRemoteDataSourceImpl implements FirestoreRemoteDataSource {
     data[DatabaseConstants.colId] = doc.id;
     return data;
   }
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchIncidents() {
+    return _incidentsCol.snapshots().asyncMap((snapshot) async {
+      final List<Map<String, dynamic>> results = [];
+      for (final doc in snapshot.docs) {
+        try {
+          // Ignore local pending writes to prevent loop echoes
+          if (doc.metadata.hasPendingWrites) continue;
+
+          final data = Map<String, dynamic>.from(doc.data());
+          data[DatabaseConstants.colId] = doc.id;
+
+          // Restore Base64 images to local files if present
+          final b64List = data['photoBase64s'];
+          if (b64List is List && b64List.isNotEmpty) {
+            final List<String> localPaths = [];
+            for (final item in b64List) {
+              final b64String = item.toString();
+              final localPath = await PhotoFileResolver.saveBase64Photo(b64String);
+              if (localPath != null) {
+                localPaths.add(localPath);
+              }
+            }
+            if (localPaths.isNotEmpty) {
+              data[DatabaseConstants.colPhotoPath] = localPaths;
+            }
+          }
+
+          results.add(data);
+        } catch (_) {}
+      }
+      return results;
+    });
+  }
+
+  @override
+  Stream<Map<String, dynamic>?> watchIncident(String incidentId) {
+    return _incidentsCol.doc(incidentId).snapshots().asyncMap((doc) async {
+      try {
+        if (!doc.exists || doc.data() == null) return null;
+        if (doc.metadata.hasPendingWrites) return null;
+
+        final data = Map<String, dynamic>.from(doc.data()!);
+        data[DatabaseConstants.colId] = doc.id;
+
+        final b64List = data['photoBase64s'];
+        if (b64List is List && b64List.isNotEmpty) {
+          final List<String> localPaths = [];
+          for (final item in b64List) {
+            final b64String = item.toString();
+            final localPath = await PhotoFileResolver.saveBase64Photo(b64String);
+            if (localPath != null) {
+              localPaths.add(localPath);
+            }
+          }
+          if (localPaths.isNotEmpty) {
+            data[DatabaseConstants.colPhotoPath] = localPaths;
+          }
+        }
+
+        return data;
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchResourceLogs(String incidentId) {
+    return _resourcesCol
+        .where(DatabaseConstants.colIncidentId, isEqualTo: incidentId)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .where((d) => !d.metadata.hasPendingWrites)
+          .map((d) {
+        final data = Map<String, dynamic>.from(d.data());
+        data[DatabaseConstants.colId] = d.id;
+        return data;
+      }).toList();
+    });
+  }
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchActivityEvents(String incidentId) {
+    return _eventsCol
+        .where(DatabaseConstants.colIncidentId, isEqualTo: incidentId)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .where((d) => !d.metadata.hasPendingWrites)
+          .map((d) {
+        final data = Map<String, dynamic>.from(d.data());
+        data[DatabaseConstants.colId] = docId(d);
+        return data;
+      }).toList();
+    });
+  }
+
+  String docId(DocumentSnapshot doc) => doc.id;
 }

@@ -18,6 +18,10 @@ class ResourceRepositoryImpl implements ResourceRepository {
   ResourceRepositoryImpl({required this.localDataSource});
 
   @override
+  Stream<void> get onResourcesChanged => localDataSource.onTableChanged
+      .where((t) => t == DatabaseConstants.tableResourceLogs);
+
+  @override
   Future<ResourceLogEntity> logResource({
     required String incidentId,
     required String resourceType,
@@ -67,7 +71,7 @@ class ResourceRepositoryImpl implements ResourceRepository {
     );
     await localDataSource.saveActivityEvent(event);
 
-    // 4. Enqueue write-ahead SyncOperation
+    // 4. Enqueue write-ahead SyncOperations for resource log and activity event
     final syncOp = SyncOperationModel(
       operationId: _uuid.v4(),
       entityId: id,
@@ -78,6 +82,17 @@ class ResourceRepositoryImpl implements ResourceRepository {
       syncState: 'PENDING',
     );
     await localDataSource.enqueueSyncOperation(syncOp);
+
+    final eventSyncOp = SyncOperationModel(
+      operationId: _uuid.v4(),
+      entityId: event.id,
+      entityType: 'ACTIVITY_EVENT',
+      operationType: 'CREATE',
+      payload: jsonEncode(event.toMap()),
+      createdAt: now,
+      syncState: 'PENDING',
+    );
+    await localDataSource.enqueueSyncOperation(eventSyncOp);
 
     return ResourceLogEntity.fromModel(model);
   }

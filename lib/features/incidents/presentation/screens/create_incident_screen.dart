@@ -52,6 +52,7 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
   late final MediaService _mediaService;
   late final NetworkInfo _networkInfo;
 
+  final _scrollController = ScrollController();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _locationNotesController = TextEditingController();
@@ -98,6 +99,7 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
   @override
   void dispose() {
     _detectingTimer?.cancel();
+    _scrollController.dispose();
     _titleController.dispose();
     _descriptionController.dispose();
     _locationNotesController.dispose();
@@ -365,48 +367,48 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
     final description = _descriptionController.text.trim();
 
     String? tErr;
-    String? dErr;
 
     if (title.isEmpty) {
       tErr = 'Incident title is required';
-    } else if (title.length < 4) {
-      tErr = 'Title must be at least 4 characters';
-    }
-
-    if (description.isEmpty) {
-      dErr = 'Operational description is required';
-    } else if (description.length < 10) {
-      dErr = 'Description must be at least 10 characters';
     }
 
     setState(() {
       _titleError = tErr;
-      _descriptionError = dErr;
+      _descriptionError = null;
     });
 
-    if (tErr == null && dErr == null) {
-      final category =
-          (_selectedCategory == 'Other' &&
-              _customCategoryController.text.trim().isNotEmpty)
-          ? _customCategoryController.text.trim()
-          : _selectedCategory;
-
-      context.read<IncidentBloc>().add(
-        CreateIncidentEvent(
-          title: title,
-          category: category,
-          severity: _selectedSeverity,
-          description: description,
-          latitude: _latitude,
-          longitude: _longitude,
-          manualLocationNotes: _locationNotesController.text.trim().isNotEmpty
-              ? _locationNotesController.text.trim()
-              : null,
-          photoPaths: _photoPaths,
-          creator: widget.currentUser,
-        ),
-      );
+    if (tErr != null) {
+      if (_scrollController.hasClients && _scrollController.offset > 0) {
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+        );
+      }
+      return;
     }
+
+    final category =
+        (_selectedCategory == 'Other' &&
+            _customCategoryController.text.trim().isNotEmpty)
+        ? _customCategoryController.text.trim()
+        : _selectedCategory;
+
+    context.read<IncidentBloc>().add(
+      CreateIncidentEvent(
+        title: title,
+        category: category,
+        severity: _selectedSeverity,
+        description: description,
+        latitude: _latitude,
+        longitude: _longitude,
+        manualLocationNotes: _locationNotesController.text.trim().isNotEmpty
+            ? _locationNotesController.text.trim()
+            : null,
+        photoPaths: _photoPaths,
+        creator: widget.currentUser,
+      ),
+    );
   }
 
   IconData _categoryIcon(String category) {
@@ -570,6 +572,7 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
           );
 
           return SingleChildScrollView(
+            controller: _scrollController,
             padding: const EdgeInsets.symmetric(
               horizontal: 20.0,
               vertical: 16.0,

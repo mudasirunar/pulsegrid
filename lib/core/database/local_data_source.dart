@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:sqflite/sqflite.dart';
 import '../../features/incidents/data/models/activity_event_model.dart';
 import '../../features/incidents/data/models/assignment_model.dart';
@@ -8,6 +10,9 @@ import 'app_database.dart';
 import 'database_constants.dart';
 
 abstract class LocalDataSource {
+  /// Emits the table name whenever data in that table is modified (insert, update, delete).
+  Stream<String> get onTableChanged;
+
   // Incidents
   Future<void> saveIncident(IncidentModel incident);
   Future<IncidentModel?> getIncidentById(String id);
@@ -55,8 +60,13 @@ abstract class LocalDataSource {
 
 class LocalDataSourceImpl implements LocalDataSource {
   final AppDatabase appDatabase;
+  final StreamController<String> _tableChangeController =
+      StreamController<String>.broadcast();
 
   LocalDataSourceImpl(this.appDatabase);
+
+  @override
+  Stream<String> get onTableChanged => _tableChangeController.stream;
 
   Future<Database> get _db async => await appDatabase.database;
 
@@ -81,6 +91,7 @@ class LocalDataSourceImpl implements LocalDataSource {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }
+    _tableChangeController.add(DatabaseConstants.tableIncidents);
   }
 
   @override
@@ -188,11 +199,15 @@ class LocalDataSourceImpl implements LocalDataSource {
   @override
   Future<int> deleteIncident(String id) async {
     final db = await _db;
-    return await db.delete(
+    final deleted = await db.delete(
       DatabaseConstants.tableIncidents,
       where: '${DatabaseConstants.colId} = ?',
       whereArgs: [id],
     );
+    if (deleted > 0) {
+      _tableChangeController.add(DatabaseConstants.tableIncidents);
+    }
+    return deleted;
   }
 
   // -------------------------------------------------------------
@@ -238,6 +253,7 @@ class LocalDataSourceImpl implements LocalDataSource {
       log.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _tableChangeController.add(DatabaseConstants.tableResourceLogs);
   }
 
   @override
@@ -300,6 +316,7 @@ class LocalDataSourceImpl implements LocalDataSource {
       event.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _tableChangeController.add(DatabaseConstants.tableActivityEvents);
   }
 
   @override
@@ -325,6 +342,7 @@ class LocalDataSourceImpl implements LocalDataSource {
       operation.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _tableChangeController.add(DatabaseConstants.tableSyncOperations);
   }
 
   @override

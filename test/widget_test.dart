@@ -17,6 +17,9 @@ import 'package:pulsegrid/main.dart';
 
 class _FakeIncidentRepository implements IncidentRepository {
   @override
+  Stream<void> get onIncidentsChanged => const Stream.empty();
+
+  @override
   Future<IncidentEntity> createIncident(IncidentEntity incident) async => incident;
 
   @override

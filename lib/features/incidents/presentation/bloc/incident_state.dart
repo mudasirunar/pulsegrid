@@ -32,11 +32,15 @@ class IncidentCreating extends IncidentState {
 
 class IncidentCreatedSuccess extends IncidentState {
   final IncidentEntity incident;
+  final List<IncidentEntity> incidents;
 
-  const IncidentCreatedSuccess(this.incident);
+  const IncidentCreatedSuccess(
+    this.incident, {
+    this.incidents = const [],
+  });
 
   @override
-  List<Object?> get props => [incident];
+  List<Object?> get props => [incident, incidents];
 }
 
 class IncidentOperating extends IncidentState {

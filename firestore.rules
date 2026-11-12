@@ -33,10 +33,15 @@ service cloud.firestore {
     //   - createdAt: string or timestamp
     //   - updatedAt: string or timestamp
     //
+    // Collections queried both at root level and as subcollections:
+    //   - resource_logs/{logId}: Resource tracking logs (contains incidentId)
+    //   - activity_events/{eventId}: Incident audit/timeline events (contains incidentId)
+    //   - assignments/{assignmentId}: Incident responder assignments (contains incidentId)
+    //
     // Subcollections under incidents/{incidentId}:
-    //   - resource_logs/{logId}: Resource tracking logs
-    //   - activity_events/{eventId}: Incident audit/timeline events
-    //   - assignments/{assignmentId}: Incident responder assignments
+    //   - resource_logs/{logId}
+    //   - activity_events/{eventId}
+    //   - assignments/{assignmentId}
     //
     // ===============================================================
 
@@ -84,6 +89,21 @@ service cloud.firestore {
       match /assignments/{assignmentId} {
         allow read, write: if isAuthenticated();
       }
+    }
+
+    // 3. Top-Level Coordination Collections
+    // In addition to nested subcollections, client synchronization queries
+    // these collections directly at the root level using incidentId filters.
+    match /resource_logs/{logId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /activity_events/{eventId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /assignments/{assignmentId} {
+      allow read, write: if isAuthenticated();
     }
 
     // ===============================================================

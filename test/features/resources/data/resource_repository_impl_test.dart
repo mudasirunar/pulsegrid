@@ -80,12 +80,13 @@ void main() {
       expect(events.first.actorId, 'responder-01');
       expect(events.first.newValue, '50 Liters of Water');
 
-      // 4. Verify SyncOperation queued
+      // 4. Verify SyncOperations queued (RESOURCE_LOG + ACTIVITY_EVENT)
       final syncOps = await localDataSource.getPendingSyncOperations();
-      expect(syncOps.length, 1);
+      expect(syncOps.length, 2);
       expect(syncOps.first.entityType, 'RESOURCE_LOG');
       expect(syncOps.first.entityId, result.id);
       expect(syncOps.first.syncState, 'PENDING');
+      expect(syncOps[1].entityType, 'ACTIVITY_EVENT');
     });
 
     test('logResource throws ValidationException on zero or negative quantity and does not persist', () async {

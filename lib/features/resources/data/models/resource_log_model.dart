@@ -36,15 +36,29 @@ class ResourceLogModel extends Equatable {
   }
 
   factory ResourceLogModel.fromMap(Map<String, dynamic> map) {
+    DateTime parseDate(dynamic val) {
+      if (val is DateTime) return val;
+      if (val != null) {
+        try {
+          final dynamic dyn = val;
+          return dyn.toDate() as DateTime;
+        } catch (_) {}
+        try {
+          return DateTime.parse(val.toString());
+        } catch (_) {}
+      }
+      return DateTime.now();
+    }
+
     return ResourceLogModel(
-      id: map[DatabaseConstants.colId] as String,
-      incidentId: map[DatabaseConstants.colIncidentId] as String,
-      resourceType: map[DatabaseConstants.colResourceType] as String,
-      quantity: (map[DatabaseConstants.colQuantity] as num).toDouble(),
-      unit: map[DatabaseConstants.colUnit] as String,
-      notes: map[DatabaseConstants.colNotes] as String?,
-      loggedBy: map[DatabaseConstants.colLoggedBy] as String,
-      createdAt: DateTime.parse(map[DatabaseConstants.colCreatedAt] as String),
+      id: (map[DatabaseConstants.colId] ?? '').toString(),
+      incidentId: (map[DatabaseConstants.colIncidentId] ?? '').toString(),
+      resourceType: (map[DatabaseConstants.colResourceType] ?? '').toString(),
+      quantity: (map[DatabaseConstants.colQuantity] as num?)?.toDouble() ?? 0.0,
+      unit: (map[DatabaseConstants.colUnit] ?? '').toString(),
+      notes: map[DatabaseConstants.colNotes]?.toString(),
+      loggedBy: (map[DatabaseConstants.colLoggedBy] ?? '').toString(),
+      createdAt: parseDate(map[DatabaseConstants.colCreatedAt]),
     );
   }
 

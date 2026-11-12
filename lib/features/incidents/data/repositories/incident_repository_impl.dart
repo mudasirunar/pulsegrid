@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/database/database_constants.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/database/local_data_source.dart';
 import '../../../auth/domain/entities/user_entity.dart';
@@ -18,6 +19,10 @@ class IncidentRepositoryImpl implements IncidentRepository {
   static const _uuid = Uuid();
 
   IncidentRepositoryImpl({required this.localDataSource});
+
+  @override
+  Stream<void> get onIncidentsChanged => localDataSource.onTableChanged
+      .where((t) => t == DatabaseConstants.tableIncidents);
 
   @override
   Future<List<IncidentEntity>> getIncidents({
@@ -58,7 +63,7 @@ class IncidentRepositoryImpl implements IncidentRepository {
     );
     await localDataSource.saveActivityEvent(createEvent);
 
-    // 3. Queue offline sync operation
+    // 3. Queue offline sync operation for incident
     final syncOp = SyncOperationModel(
       operationId: _uuid.v4(),
       entityId: incident.id,
@@ -69,6 +74,18 @@ class IncidentRepositoryImpl implements IncidentRepository {
       syncState: 'PENDING',
     );
     await localDataSource.enqueueSyncOperation(syncOp);
+
+    // 4. Queue offline sync operation for initial creation activity event
+    final eventSyncOp = SyncOperationModel(
+      operationId: _uuid.v4(),
+      entityId: createEvent.id,
+      entityType: 'ACTIVITY_EVENT',
+      operationType: 'CREATE',
+      payload: jsonEncode(createEvent.toMap()),
+      createdAt: incident.createdAt,
+      syncState: 'PENDING',
+    );
+    await localDataSource.enqueueSyncOperation(eventSyncOp);
 
     return incident;
   }
@@ -98,7 +115,19 @@ class IncidentRepositoryImpl implements IncidentRepository {
     // 4. Persist audit activity event
     await localDataSource.saveActivityEvent(transitionResult.activityEvent);
 
-    // 5. Queue sync operation for status change
+    // 5. Queue sync operation for activity event
+    final eventSyncOp = SyncOperationModel(
+      operationId: _uuid.v4(),
+      entityId: transitionResult.activityEvent.id,
+      entityType: 'ACTIVITY_EVENT',
+      operationType: 'CREATE',
+      payload: jsonEncode(transitionResult.activityEvent.toMap()),
+      createdAt: DateTime.now(),
+      syncState: 'PENDING',
+    );
+    await localDataSource.enqueueSyncOperation(eventSyncOp);
+
+    // 6. Queue sync operation for status change
     final syncOp = SyncOperationModel(
       operationId: _uuid.v4(),
       entityId: incidentId,

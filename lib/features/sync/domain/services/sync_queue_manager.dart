@@ -34,6 +34,7 @@ class SyncQueueManager {
   final Duration baseBackoff;
 
   bool _isProcessing = false;
+  bool _hasPendingDrain = false;
   DateTime? _lastSyncedAt;
   final StreamController<SyncQueueMetrics> _metricsController =
       StreamController<SyncQueueMetrics>.broadcast();
@@ -67,56 +68,81 @@ class SyncQueueManager {
   /// If [force] is true, ignores exponential backoff and retry limits.
   Future<SyncQueueMetrics> processQueue({bool force = false}) async {
     if (_isProcessing) {
+      _hasPendingDrain = true;
       return await getMetrics();
     }
 
     _isProcessing = true;
     _emitMetrics();
 
+    final attemptedInPass = <String>{};
+
     try {
-      final operations = await syncRepository.getPendingOperations();
+      while (true) {
+        _hasPendingDrain = false;
+        final rawOperations = await syncRepository.getPendingOperations();
+        if (rawOperations.isEmpty) break;
 
-      for (final operation in operations) {
-        // Enforce retry limits unless forced
-        if (!force && operation.retryCount >= maxRetries) {
-          continue;
-        }
+        // Prioritize fresh PENDING operations ahead of older FAILED retries
+        // so failed operations never head-of-line block new user actions.
+        final pendingFirst = [
+          ...rawOperations.where((op) => op.status == SyncStatus.pending),
+          ...rawOperations.where((op) => op.status != SyncStatus.pending),
+        ];
 
-        // Enforce exponential backoff unless forced
-        if (!force && operation.status == SyncStatus.failed) {
-          final backoff = calculateBackoff(operation.retryCount);
-          final nextAllowedAttempt = operation.createdAt.add(backoff);
-          if (DateTime.now().isBefore(nextAllowedAttempt)) {
+        bool processedAny = false;
+        for (final operation in pendingFirst) {
+          if (attemptedInPass.contains(operation.operationId)) {
             continue;
           }
-        }
 
-        // Mark operation as SYNCING
-        await syncRepository.updateOperationStatus(
-          operation.operationId,
-          SyncStatus.syncing,
-        );
-        _emitMetrics();
-
-        try {
-          if (remoteSyncHandler != null) {
-            await remoteSyncHandler!(operation);
+          // Enforce retry limits unless forced
+          if (!force && operation.retryCount >= maxRetries) {
+            continue;
           }
-          // Mark SYNCED on success
+
+          // Enforce exponential backoff unless forced
+          if (!force && operation.status == SyncStatus.failed) {
+            final backoff = calculateBackoff(operation.retryCount);
+            final nextAllowedAttempt = operation.createdAt.add(backoff);
+            if (DateTime.now().isBefore(nextAllowedAttempt)) {
+              continue;
+            }
+          }
+
+          attemptedInPass.add(operation.operationId);
+
+          // Mark operation as SYNCING
           await syncRepository.updateOperationStatus(
             operation.operationId,
-            SyncStatus.synced,
+            SyncStatus.syncing,
           );
-          _lastSyncedAt = DateTime.now();
-        } catch (e) {
-          final newRetryCount = operation.retryCount + 1;
-          await syncRepository.updateOperationStatus(
-            operation.operationId,
-            SyncStatus.failed,
-            errorMessage: e.toString(),
-            retryCount: newRetryCount,
-          );
+          _emitMetrics();
+
+          try {
+            if (remoteSyncHandler != null) {
+              await remoteSyncHandler!(operation);
+            }
+            // Mark SYNCED on success
+            await syncRepository.updateOperationStatus(
+              operation.operationId,
+              SyncStatus.synced,
+            );
+            _lastSyncedAt = DateTime.now();
+            processedAny = true;
+          } catch (e) {
+            final newRetryCount = operation.retryCount + 1;
+            await syncRepository.updateOperationStatus(
+              operation.operationId,
+              SyncStatus.failed,
+              errorMessage: e.toString(),
+              retryCount: newRetryCount,
+            );
+          }
         }
+
+        if (!processedAny && !_hasPendingDrain) break;
+        if (!_hasPendingDrain) break;
       }
     } finally {
       _isProcessing = false;

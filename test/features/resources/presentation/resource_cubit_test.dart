@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulsegrid/core/errors/exceptions.dart';
 import 'package:pulsegrid/features/resources/domain/entities/resource_log_entity.dart';
@@ -8,6 +9,11 @@ import 'package:pulsegrid/features/resources/presentation/cubit/resource_state.d
 
 class _MockResourceRepository implements ResourceRepository {
   final List<ResourceLogEntity> logs = [];
+  final StreamController<void> resourceChangedController =
+      StreamController<void>.broadcast();
+
+  @override
+  Stream<void> get onResourcesChanged => resourceChangedController.stream;
 
   @override
   Future<ResourceLogEntity> logResource({
@@ -129,6 +135,33 @@ void main() {
       );
 
       expect(success, isFalse);
+    });
+
+    test('onResourcesChanged triggers silent reload for the active incident', () async {
+      await cubit.loadResources('inc-100');
+      expect((cubit.state as ResourceLoaded).logs.length, 0);
+
+      // New log added to repository by background sync
+      mockRepo.logs.add(
+        ResourceLogEntity(
+          id: 'res-bg-1',
+          incidentId: 'inc-100',
+          resourceType: 'Fuel',
+          quantity: 20.0,
+          unit: 'Gallons',
+          loggedBy: 'team-alpha',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      // Emit onResourcesChanged
+      mockRepo.resourceChangedController.add(null);
+      await pumpEventQueue();
+
+      expect(cubit.state, isA<ResourceLoaded>());
+      final loaded = cubit.state as ResourceLoaded;
+      expect(loaded.logs.length, 1);
+      expect(loaded.logs.first.resourceType, 'Fuel');
     });
   });
 }

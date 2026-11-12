@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../domain/entities/incident_entity.dart';
+import '../../domain/entities/incident_severity.dart';
 import '../../domain/entities/incident_status.dart';
 import '../../domain/repositories/incident_repository.dart';
 import 'incident_event.dart';
@@ -10,6 +12,11 @@ import 'incident_state.dart';
 class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
   final IncidentRepository incidentRepository;
   static const _uuid = Uuid();
+  StreamSubscription<void>? _incidentsSubscription;
+
+  IncidentStatus? _lastStatusFilter;
+  IncidentSeverity? _lastSeverityFilter;
+  String? _lastSearchQuery;
 
   IncidentBloc({
     required this.incidentRepository,
@@ -18,13 +25,30 @@ class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
     on<LoadIncidentsEvent>(_onLoadIncidents);
     on<CreateIncidentEvent>(_onCreateIncident);
     on<UpdateIncidentStatusEvent>(_onUpdateIncidentStatus);
+
+    _incidentsSubscription = incidentRepository.onIncidentsChanged.listen((_) {
+      if (state is! IncidentCreating && state is! IncidentOperating) {
+        add(LoadIncidentsEvent(
+          statusFilter: _lastStatusFilter,
+          severityFilter: _lastSeverityFilter,
+          searchQuery: _lastSearchQuery,
+          isQuiet: true,
+        ));
+      }
+    });
   }
 
   Future<void> _onLoadIncidents(
     LoadIncidentsEvent event,
     Emitter<IncidentState> emit,
   ) async {
-    emit(const IncidentLoading());
+    _lastStatusFilter = event.statusFilter;
+    _lastSeverityFilter = event.severityFilter;
+    _lastSearchQuery = event.searchQuery;
+
+    if (!event.isQuiet) {
+      emit(const IncidentLoading());
+    }
     try {
       final incidents = await incidentRepository.getIncidents(
         statusFilter: event.statusFilter,
@@ -33,7 +57,9 @@ class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
       );
       emit(IncidentLoaded(incidents));
     } catch (e) {
-      emit(IncidentError(e.toString()));
+      if (!event.isQuiet) {
+        emit(IncidentError(e.toString()));
+      }
     }
   }
 
@@ -66,10 +92,12 @@ class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
       );
 
       final created = await incidentRepository.createIncident(incident);
-      emit(IncidentCreatedSuccess(created));
-
-      // Automatically refresh list
-      add(const LoadIncidentsEvent());
+      final refreshed = await incidentRepository.getIncidents(
+        statusFilter: _lastStatusFilter,
+        severityFilter: _lastSeverityFilter,
+        searchQuery: _lastSearchQuery,
+      );
+      emit(IncidentCreatedSuccess(created, incidents: refreshed));
     } catch (e) {
       emit(IncidentError(e.toString()));
     }
@@ -81,9 +109,11 @@ class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
   ) async {
     final currentList = state is IncidentLoaded
         ? (state as IncidentLoaded).incidents
-        : state is IncidentOperationSuccess
-            ? (state as IncidentOperationSuccess).incidents
-            : <IncidentEntity>[];
+        : state is IncidentCreatedSuccess
+            ? (state as IncidentCreatedSuccess).incidents
+            : state is IncidentOperationSuccess
+                ? (state as IncidentOperationSuccess).incidents
+                : <IncidentEntity>[];
     emit(IncidentOperating(currentList));
     try {
       final updated = await incidentRepository.updateIncidentStatus(
@@ -91,7 +121,11 @@ class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
         targetStatus: event.targetStatus,
         actor: event.actor,
       );
-      final refreshed = await incidentRepository.getIncidents();
+      final refreshed = await incidentRepository.getIncidents(
+        statusFilter: _lastStatusFilter,
+        severityFilter: _lastSeverityFilter,
+        searchQuery: _lastSearchQuery,
+      );
       emit(IncidentOperationSuccess(
         message: 'Status updated to ${event.targetStatus.displayName}',
         incidents: refreshed,
@@ -101,6 +135,12 @@ class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
       emit(IncidentOperationFailure(e.toString().replaceAll('Exception: ', '')));
       emit(IncidentLoaded(currentList));
     }
+  }
+
+  @override
+  Future<void> close() {
+    _incidentsSubscription?.cancel();
+    return super.close();
   }
 }
 

@@ -57,9 +57,11 @@ class IncidentModel extends Equatable {
   }
 
   factory IncidentModel.fromMap(Map<String, dynamic> map) {
-    final rawPhoto = map[DatabaseConstants.colPhotoPath] as String?;
+    final rawPhoto = map[DatabaseConstants.colPhotoPath];
     List<String> photos = [];
-    if (rawPhoto != null && rawPhoto.isNotEmpty) {
+    if (rawPhoto is List) {
+      photos = rawPhoto.map((e) => e.toString()).toList();
+    } else if (rawPhoto is String && rawPhoto.isNotEmpty) {
       if (rawPhoto.startsWith('[')) {
         try {
           final decoded = jsonDecode(rawPhoto);
@@ -74,21 +76,36 @@ class IncidentModel extends Equatable {
       }
     }
 
+    DateTime parseDate(dynamic val) {
+      if (val is DateTime) return val;
+      if (val != null) {
+        try {
+          // Supports Cloud Firestore Timestamp without direct import
+          final dynamic dyn = val;
+          return dyn.toDate() as DateTime;
+        } catch (_) {}
+        try {
+          return DateTime.parse(val.toString());
+        } catch (_) {}
+      }
+      return DateTime.now();
+    }
+
     return IncidentModel(
-      id: map[DatabaseConstants.colId] as String,
-      title: map[DatabaseConstants.colTitle] as String,
-      category: map[DatabaseConstants.colCategory] as String,
-      severity: map[DatabaseConstants.colSeverity] as String,
-      description: map[DatabaseConstants.colDescription] as String,
-      status: map[DatabaseConstants.colStatus] as String,
+      id: (map[DatabaseConstants.colId] ?? '').toString(),
+      title: (map[DatabaseConstants.colTitle] ?? '').toString(),
+      category: (map[DatabaseConstants.colCategory] ?? 'Other').toString(),
+      severity: (map[DatabaseConstants.colSeverity] ?? 'Medium').toString(),
+      description: (map[DatabaseConstants.colDescription] ?? '').toString(),
+      status: (map[DatabaseConstants.colStatus] ?? 'New').toString(),
       version: (map[DatabaseConstants.colVersion] as num?)?.toInt() ?? 1,
       latitude: (map[DatabaseConstants.colLatitude] as num?)?.toDouble(),
       longitude: (map[DatabaseConstants.colLongitude] as num?)?.toDouble(),
-      manualLocationNotes: map[DatabaseConstants.colManualLocationNotes] as String?,
+      manualLocationNotes: map[DatabaseConstants.colManualLocationNotes]?.toString(),
       photoPaths: photos,
-      createdBy: map[DatabaseConstants.colCreatedBy] as String,
-      createdAt: DateTime.parse(map[DatabaseConstants.colCreatedAt] as String),
-      updatedAt: DateTime.parse(map[DatabaseConstants.colUpdatedAt] as String),
+      createdBy: (map[DatabaseConstants.colCreatedBy] ?? 'Unknown').toString(),
+      createdAt: parseDate(map[DatabaseConstants.colCreatedAt]),
+      updatedAt: parseDate(map[DatabaseConstants.colUpdatedAt]),
     );
   }
 
