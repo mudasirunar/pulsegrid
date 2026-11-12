@@ -182,6 +182,13 @@ void main() {
     expect(timeline.length, 2);
     expect(timeline.first.eventType, 'INCIDENT_CREATED');
     expect(timeline.last.eventType, 'STATUS_CHANGE');
+
+    // Regression check: updating the parent incident does NOT cascade-delete existing activity events
+    final updatedIncident = incident.copyWith(status: 'In Progress');
+    await localDataSource.saveIncident(updatedIncident);
+
+    final timelineAfterIncidentUpdate = await localDataSource.getActivityTimeline('inc-act-1');
+    expect(timelineAfterIncidentUpdate.length, 2);
   });
 
   test('Sync Operations: enqueue, retrieve pending, update state, and remove', () async {

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/app_badge.dart';
 import '../../../../core/widgets/app_snackbar.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../domain/entities/activity_event_entity.dart';
@@ -112,9 +111,39 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: Center(
-              child: AppBadge(
-                text: 'v${_incident.version}',
-                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _statusColor(_incident.status).withValues(alpha: isDark ? 0.2 : 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _statusColor(_incident.status).withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _statusColor(_incident.status),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _incident.status.displayName.toUpperCase(),
+                      style: TextStyle(
+                        color: _statusColor(_incident.status),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -150,91 +179,124 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Header Chips (Category, Severity, Status)
-                Row(
-                  children: [
-                    AppBadge(
-                      text: _incident.category.toUpperCase(),
-                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-                    ),
-                    const SizedBox(width: 8),
-                    AppBadge(
-                      text: _incident.severity.displayName.toUpperCase(),
-                      color: _severityColor(_incident.severity),
-                    ),
-                    const Spacer(),
-                    AppBadge(
-                      text: _incident.status.displayName.toUpperCase(),
-                      color: _statusColor(_incident.status),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // 2. Title & Metadata
+                // 1. Incident Title
                 Text(
                   _incident.title,
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                const SizedBox(height: 8),
+
+                // 2. Metadata Lines
+                // Line 1: Reported by [Reporter Name] • [Relative Time]
+                Row(
                   children: [
-                    Text.rich(
-                      TextSpan(
+                    Icon(
+                      Icons.person_outline_rounded,
+                      size: 15,
+                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Reported by ${_resolveReporterName(_incident.createdBy)} • ${_formatTimeAgo(_incident.createdAt)}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+
+                // Line 2: Clock Icon + Exact Timestamp
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time_rounded,
+                      size: 15,
+                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _formatDate(_incident.createdAt),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // 3. Category & Severity Badges
+                Row(
+                  children: [
+                    // Category Pill
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          WidgetSpan(
-                            alignment: PlaceholderAlignment.middle,
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 4.0),
-                              child: Icon(
-                                Icons.person_outline,
-                                size: 14,
-                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                              ),
-                            ),
+                          Icon(
+                            _categoryIcon(_incident.category),
+                            size: 15,
+                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                           ),
-                          TextSpan(
-                            text: 'Reported by ${_incident.createdBy == widget.currentUser.id && widget.currentUser.displayName.trim().isNotEmpty ? widget.currentUser.displayName : _incident.createdBy}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                          const SizedBox(width: 6),
+                          Text(
+                            _incident.category,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                             ),
                           ),
                         ],
                       ),
-                      softWrap: true,
-                      maxLines: 2,
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.access_time_outlined,
-                          size: 14,
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                    const SizedBox(width: 8),
+
+                    // Severity Pill
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: _severityColor(_incident.severity).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _severityColor(_incident.severity).withValues(alpha: 0.45),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDate(_incident.createdAt),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.crisis_alert_rounded,
+                            size: 15,
+                            color: _severityColor(_incident.severity),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 6),
+                          Text(
+                            _incident.severity.displayName,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: _severityColor(_incident.severity),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-
-                // Divider
-                Divider(
-                  height: 32,
-                  thickness: 1,
-                  color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                ),
+                const SizedBox(height: 24),
 
                 // 3. Evidence Photo Preview
                 if (_incident.photoPaths.isNotEmpty) ...[
@@ -284,17 +346,11 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                   longitude: _incident.longitude,
                   manualLocationNotes: _incident.manualLocationNotes,
                 ),
-
-                // Divider
-                Divider(
-                  height: 36,
-                  thickness: 1,
-                  color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                ),
+                const SizedBox(height: 28),
 
                 // 6. Sequential Lifecycle Stepper
                 Text(
-                  'LIFECYCLE STATE MACHINE',
+                  'LIFECYCLE STATE',
                   style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
@@ -312,17 +368,11 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                   isOperating: isOperating,
                   onTransition: _onTransitionStatus,
                 ),
+                const SizedBox(height: 28),
 
-                // Divider
-                Divider(
-                  height: 40,
-                  thickness: 1,
-                  color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                ),
-
-                // 8. Chronological Activity Timeline
+                // 8. Activity Timeline
                 Text(
-                  'CHRONOLOGICAL ACTIVITY TIMELINE',
+                  'ACTIVITY TIMELINE',
                   style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
@@ -333,6 +383,8 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                 IncidentTimelineView(
                   timeline: _timeline,
                   isLoading: _isLoadingTimeline,
+                  currentUser: widget.currentUser,
+                  incident: _incident,
                 ),
                 const SizedBox(height: 32),
               ],
@@ -343,7 +395,75 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
     );
   }
 
+  String _resolveReporterName(String createdBy) {
+    if (createdBy == widget.currentUser.id && widget.currentUser.displayName.trim().isNotEmpty) {
+      return widget.currentUser.displayName;
+    }
+    if (createdBy == 'user-coordinator-01') return 'Sarah Chen';
+    if (createdBy == 'user-responder-01') return 'Marcus Vance';
+    if (createdBy == 'user-viewer-01') return 'Auditor Evans';
+
+    final isRawId = RegExp(r'^[0-9a-fA-F-]{28,}$').hasMatch(createdBy) ||
+        (createdBy.length >= 20 && !createdBy.contains(' '));
+    if (isRawId) {
+      return widget.currentUser.displayName.trim().isNotEmpty
+          ? widget.currentUser.displayName
+          : widget.currentUser.role.displayName;
+    }
+    return createdBy;
+  }
+
   String _formatDate(DateTime dt) {
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    final day = dt.day.toString().padLeft(2, '0');
+    final month = dt.month.toString().padLeft(2, '0');
+    final year = dt.year.toString();
+    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $ampm • $day-$month-$year';
+  }
+
+  String _formatTimeAgo(DateTime dt) {
+    final now = DateTime.now();
+    final difference = now.difference(dt);
+
+    if (difference.isNegative || difference.inSeconds < 45) {
+      return 'just now';
+    } else if (difference.inMinutes < 60) {
+      final mins = difference.inMinutes;
+      return '$mins ${mins == 1 ? 'min' : 'mins'} ago';
+    } else if (difference.inHours < 24) {
+      final hours = difference.inHours;
+      return '$hours ${hours == 1 ? 'hour' : 'hours'} ago';
+    } else if (difference.inDays < 7) {
+      final days = difference.inDays;
+      return '$days ${days == 1 ? 'day' : 'days'} ago';
+    } else {
+      final day = dt.day.toString().padLeft(2, '0');
+      final month = dt.month.toString().padLeft(2, '0');
+      return '$day-$month-${dt.year}';
+    }
+  }
+
+  IconData _categoryIcon(String category) {
+    switch (category) {
+      case 'Medical':
+        return Icons.medical_services_outlined;
+      case 'Fire':
+        return Icons.local_fire_department_outlined;
+      case 'Hazmat':
+        return Icons.warning_amber_rounded;
+      case 'Structural Collapse':
+        return Icons.domain_disabled_outlined;
+      case 'Search & Rescue':
+        return Icons.person_search_outlined;
+      case 'Infrastructure':
+        return Icons.electrical_services_outlined;
+      case 'Evacuation':
+        return Icons.directions_run_outlined;
+      case 'Other':
+      default:
+        return Icons.more_horiz_rounded;
+    }
   }
 }

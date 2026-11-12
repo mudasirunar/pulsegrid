@@ -62,11 +62,21 @@ class LocalDataSourceImpl implements LocalDataSource {
   @override
   Future<void> saveIncident(IncidentModel incident) async {
     final db = await _db;
-    await db.insert(
+    // Perform an UPDATE first so existing child foreign-key rows (activity_events, photos, etc.)
+    // are not deleted via ON DELETE CASCADE (which happens when INSERT OR REPLACE deletes the row).
+    final count = await db.update(
       DatabaseConstants.tableIncidents,
       incident.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      where: '${DatabaseConstants.colId} = ?',
+      whereArgs: [incident.id],
     );
+    if (count == 0) {
+      await db.insert(
+        DatabaseConstants.tableIncidents,
+        incident.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
   }
 
   @override

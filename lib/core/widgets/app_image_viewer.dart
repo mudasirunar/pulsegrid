@@ -1,6 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../utils/photo_file_resolver.dart';
+import 'app_photo_placeholder.dart';
 
 /// Full-screen high-performance image viewer overlay with:
 /// - Horizontal swipe between multiple images
@@ -344,7 +346,44 @@ class _ZoomableImageViewState extends State<_ZoomableImageView>
 
   @override
   Widget build(BuildContext context) {
-    final file = File(widget.photoPath);
+    final clean = widget.photoPath.trim();
+    final isNetwork = clean.startsWith('http://') || clean.startsWith('https://');
+
+    Widget imageContent;
+
+    if (isNetwork) {
+      imageContent = Image.network(
+        clean,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => AppPhotoPlaceholder(
+          photoPath: clean,
+          isDark: true,
+          isFullScreen: true,
+          forcedReason: PhotoErrorReason.networkOffline,
+        ),
+      );
+    } else {
+      final resolved = PhotoFileResolver.resolveLocalFile(clean);
+      if (resolved != null) {
+        imageContent = Image.file(
+          resolved,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => AppPhotoPlaceholder(
+            photoPath: clean,
+            isDark: true,
+            isFullScreen: true,
+            forcedReason: PhotoErrorReason.corrupted,
+          ),
+        );
+      } else {
+        imageContent = AppPhotoPlaceholder(
+          photoPath: clean,
+          isDark: true,
+          isFullScreen: true,
+          forcedReason: PhotoErrorReason.localMissing,
+        );
+      }
+    }
 
     return GestureDetector(
       onDoubleTapDown: _onDoubleTapDown,
@@ -357,40 +396,8 @@ class _ZoomableImageViewState extends State<_ZoomableImageView>
         maxScale: 4.5,
         panAxis: PanAxis.free,
         child: Center(
-          child: file.existsSync()
-              ? Image.file(
-                  file,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, _, _) => _buildPlaceholder(),
-                )
-              : _buildPlaceholder(),
+          child: imageContent,
         ),
-      ),
-    );
-  }
-
-  Widget _buildPlaceholder() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.broken_image_outlined,
-            size: 64,
-            color: Colors.white.withValues(alpha: 0.4),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Photo unavailable on this device',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
       ),
     );
   }

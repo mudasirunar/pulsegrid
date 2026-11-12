@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
 
+import '../../../../core/utils/photo_file_resolver.dart';
+
 enum MediaPermissionStatus {
   granted,
   denied,
@@ -133,7 +135,8 @@ class MediaServiceImpl implements MediaService {
         maxHeight: 1024,
         imageQuality: 70,
       );
-      return photo?.path;
+      if (photo == null) return null;
+      return await PhotoFileResolver.persistPickedFile(photo.path);
     } catch (_) {
       return null;
     }
@@ -148,7 +151,8 @@ class MediaServiceImpl implements MediaService {
         maxHeight: 1024,
         imageQuality: 70,
       );
-      return image?.path;
+      if (image == null) return null;
+      return await PhotoFileResolver.persistPickedFile(image.path);
     } catch (_) {
       return null;
     }
@@ -163,7 +167,12 @@ class MediaServiceImpl implements MediaService {
         maxHeight: 1024,
         imageQuality: 70,
       );
-      return images.map((x) => x.path).toList();
+      final persisted = <String>[];
+      for (final img in images) {
+        final path = await PhotoFileResolver.persistPickedFile(img.path);
+        persisted.add(path);
+      }
+      return persisted;
     } catch (_) {
       return [];
     }

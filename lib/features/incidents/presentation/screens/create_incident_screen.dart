@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/network/network_info.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/photo_file_resolver.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_dialog.dart';
 import '../../../../core/widgets/app_image_viewer.dart';
@@ -1048,7 +1049,7 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
                                   initialIndex: index,
                                 ),
                                 child: Image.file(
-                                  File(path),
+                                  PhotoFileResolver.resolveLocalFile(path) ?? File(path),
                                   height: 120,
                                   width: 120,
                                   fit: BoxFit.cover,
@@ -1131,7 +1132,7 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(24),
                             ),
                           ),
                         ),
@@ -1152,21 +1153,21 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(24),
                             ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
 
                 // 7. Submit Action Button
                 AppButton(
                   text: 'Report Incident',
                   isLoading: isSubmitting,
                   isDisabled: isSubmitting,
-                  borderRadius: 14.0,
+                  borderRadius: 24.0,
                   height: 50.0,
                   onPressed: isSubmitting ? null : _onSubmit,
                 ),

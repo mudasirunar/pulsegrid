@@ -11,23 +11,13 @@ class IncidentLifecycleStepper extends StatelessWidget {
     required this.currentStatus,
   });
 
-  Color _statusColor(IncidentStatus status) {
-    switch (status) {
-      case IncidentStatus.newIncident:
-        return AppColors.statusNew;
-      case IncidentStatus.assigned:
-        return AppColors.statusAssigned;
-      case IncidentStatus.inProgress:
-        return AppColors.statusInProgress;
-      case IncidentStatus.resolved:
-        return AppColors.statusResolved;
-      case IncidentStatus.closed:
-        return AppColors.statusClosed;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const completedGreen = Color(0xFF22C55E);
+    final activeColor = isDark ? AppColors.accentDark : AppColors.primaryLight;
+    const activeTextColor = Colors.white;
+
     const statuses = [
       IncidentStatus.newIncident,
       IncidentStatus.assigned,
@@ -36,57 +26,108 @@ class IncidentLifecycleStepper extends StatelessWidget {
       IncidentStatus.closed,
     ];
     final currentIndex = statuses.indexOf(currentStatus);
+    final isClosed = currentStatus == IncidentStatus.closed;
 
-    return Row(
-      children: List.generate(statuses.length * 2 - 1, (index) {
-        if (index.isOdd) {
-          final stepIndex = index ~/ 2;
-          final isCompleted = stepIndex < currentIndex;
-          return Expanded(
-            child: Container(
-              height: 2,
-              color: isCompleted ? AppColors.primaryLight : Colors.grey.withValues(alpha: 0.3),
-            ),
-          );
-        }
-
-        final stepIndex = index ~/ 2;
-        final status = statuses[stepIndex];
-        final isActive = stepIndex == currentIndex;
-        final isPassed = stepIndex < currentIndex;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalWidth = constraints.maxWidth;
+        const circleSize = 24.0;
+        final stepSpacing = (totalWidth - circleSize) / (statuses.length - 1);
 
         return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 12,
-              backgroundColor: isActive
-                  ? _statusColor(status)
-                  : isPassed
-                      ? AppColors.primaryLight
-                      : Colors.grey.withValues(alpha: 0.3),
-              child: isPassed
-                  ? const Icon(Icons.check, size: 14, color: Colors.white)
-                  : Text(
-                      '${stepIndex + 1}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: isActive ? Colors.white : Colors.grey,
+            // 1. Circles and connecting lines with equal 6px gap to every circle
+            Row(
+              children: [
+                for (int i = 0; i < statuses.length; i++) ...[
+                  if (i > 0)
+                    Expanded(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 6),
+                        height: 2,
+                        decoration: BoxDecoration(
+                          color: (isClosed || i <= currentIndex)
+                              ? completedGreen
+                              : (isDark ? AppColors.borderDark : Colors.grey.withValues(alpha: 0.3)),
+                          borderRadius: BorderRadius.circular(1),
+                        ),
                       ),
                     ),
+                  Builder(
+                    builder: (context) {
+                      final isPassed = isClosed || i < currentIndex;
+                      final isActive = !isClosed && i == currentIndex;
+
+                      return CircleAvatar(
+                        radius: 12,
+                        backgroundColor: isPassed
+                            ? completedGreen
+                            : isActive
+                                ? activeColor
+                                : (isDark ? AppColors.surfaceDark : Colors.grey.withValues(alpha: 0.2)),
+                        child: isPassed
+                            ? const Icon(Icons.check, size: 14, color: Colors.white)
+                            : Text(
+                                '${i + 1}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isActive
+                                      ? activeTextColor
+                                      : (isDark ? AppColors.textSecondaryDark : Colors.grey),
+                                ),
+                              ),
+                      );
+                    },
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              status.displayName,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive ? _statusColor(status) : Colors.grey,
+            const SizedBox(height: 6),
+            // 2. Labels centered directly beneath their corresponding circle
+            SizedBox(
+              height: 16,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  for (int i = 0; i < statuses.length; i++) ...[
+                    Builder(
+                      builder: (context) {
+                        final center = 12.0 + i * stepSpacing;
+                        const labelWidth = 72.0;
+                        final isHighlighted = (isClosed && i == statuses.length - 1) ||
+                            (!isClosed && i == currentIndex);
+                        final status = statuses[i];
+
+                        return Positioned(
+                          left: center - (labelWidth / 2),
+                          width: labelWidth,
+                          child: Text(
+                            status.displayName,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.visible,
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
+                              color: isHighlighted
+                                  ? (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight)
+                                  : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
         );
-      }),
+      },
     );
   }
 }

@@ -22,81 +22,45 @@ class IncidentLocationDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     final hasGps = latitude != null && longitude != null;
-    final hasNotes = manualLocationNotes != null && manualLocationNotes!.isNotEmpty;
+    final hasNotes = manualLocationNotes != null && manualLocationNotes!.trim().isNotEmpty;
 
     if (!hasGps && !hasNotes) {
       return Text(
-        'No location coordinates recorded.',
+        'No location recorded.',
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 13,
           color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
         ),
       );
     }
 
+    final textColor = isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
+    final secondaryTextColor = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (hasGps) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceDark : AppColors.borderLight.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderLight,
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.location_on, size: 18, color: AppColors.primaryLight),
-                const SizedBox(width: 10),
-                Text(
-                  'GPS Coordinates:',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _formatCoordinates(latitude!, longitude!),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                ),
-              ],
+        if (hasGps)
+          Text(
+            _formatCoordinates(latitude!, longitude!),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: textColor,
             ),
           ),
-          if (hasNotes) const SizedBox(height: 8),
-        ],
-        if (hasNotes) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceDark : AppColors.borderLight.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderLight,
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.notes_outlined, size: 18, color: AppColors.severityMedium),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Location Notes: $manualLocationNotes',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-              ],
+        if (hasGps && hasNotes) const SizedBox(height: 4),
+        if (hasNotes)
+          Text(
+            manualLocationNotes!.trim(),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              height: 1.4,
+              color: hasGps ? secondaryTextColor : textColor,
             ),
           ),
-        ],
       ],
     );
   }

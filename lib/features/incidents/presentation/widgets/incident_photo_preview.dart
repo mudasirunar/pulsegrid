@@ -1,8 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/photo_file_resolver.dart';
 import '../../../../core/widgets/app_image_viewer.dart';
+import '../../../../core/widgets/app_photo_placeholder.dart';
 
 class IncidentPhotoPreview extends StatefulWidget {
   final List<String> photoPaths;
@@ -163,36 +164,43 @@ class _IncidentPhotoPreviewState extends State<IncidentPhotoPreview> {
   }
 
   Widget _buildSingleImage(String path, bool isDark) {
-    return Image.file(
-      File(path),
-      height: 220,
-      width: double.infinity,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) => Container(
-        height: 120,
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceDark : AppColors.borderLight.withValues(alpha: 0.4),
-          borderRadius: BorderRadius.circular(14),
+    final clean = path.trim();
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      return Image.network(
+        clean,
+        height: 220,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => AppPhotoPlaceholder(
+          photoPath: clean,
+          isDark: isDark,
+          isFullScreen: false,
+          forcedReason: PhotoErrorReason.networkOffline,
         ),
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.broken_image_outlined,
-              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'Photo attached (file moved or offline)',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-              ),
-            ),
-          ],
+      );
+    }
+
+    final resolvedFile = PhotoFileResolver.resolveLocalFile(clean);
+    if (resolvedFile != null) {
+      return Image.file(
+        resolvedFile,
+        height: 220,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => AppPhotoPlaceholder(
+          photoPath: clean,
+          isDark: isDark,
+          isFullScreen: false,
+          forcedReason: PhotoErrorReason.corrupted,
         ),
-      ),
+      );
+    }
+
+    return AppPhotoPlaceholder(
+      photoPath: clean,
+      isDark: isDark,
+      isFullScreen: false,
+      forcedReason: PhotoErrorReason.localMissing,
     );
   }
 }
