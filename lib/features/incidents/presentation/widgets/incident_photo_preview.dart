@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/photo_file_resolver.dart';
 import '../../../../core/widgets/app_image_viewer.dart';
 import '../../../../core/widgets/app_photo_placeholder.dart';
+import 'incident_details_skeleton.dart';
 
 class IncidentPhotoPreview extends StatefulWidget {
   final List<String> photoPaths;
@@ -165,12 +167,53 @@ class _IncidentPhotoPreviewState extends State<IncidentPhotoPreview> {
 
   Widget _buildSingleImage(String path, bool isDark) {
     final clean = path.trim();
+
+    // 1. Base64 encoded image string (data:image/... or raw base64)
+    if (clean.startsWith('data:image/') ||
+        (clean.length > 200 && !clean.contains('/') && !clean.contains('\\'))) {
+      try {
+        final rawBase64 = clean.contains(',') ? clean.split(',').last : clean;
+        final bytes = base64Decode(rawBase64);
+        return Image.memory(
+          bytes,
+          height: 220,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded || frame != null) return child;
+            return const IncidentShimmerBox(
+              height: 220,
+              width: double.infinity,
+              borderRadius: 14,
+            );
+          },
+          errorBuilder: (context, error, stackTrace) => AppPhotoPlaceholder(
+            photoPath: clean,
+            isDark: isDark,
+            isFullScreen: false,
+            forcedReason: PhotoErrorReason.corrupted,
+          ),
+        );
+      } catch (_) {
+        // Fall through to other checks
+      }
+    }
+
+    // 2. Remote network URL (with per-photo shimmer while downloading)
     if (clean.startsWith('http://') || clean.startsWith('https://')) {
       return Image.network(
         clean,
         height: 220,
         width: double.infinity,
         fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return const IncidentShimmerBox(
+            height: 220,
+            width: double.infinity,
+            borderRadius: 14,
+          );
+        },
         errorBuilder: (context, error, stackTrace) => AppPhotoPlaceholder(
           photoPath: clean,
           isDark: isDark,
@@ -180,6 +223,7 @@ class _IncidentPhotoPreviewState extends State<IncidentPhotoPreview> {
       );
     }
 
+    // 3. Local file (with frameBuilder shimmer during async disk decode)
     final resolvedFile = PhotoFileResolver.resolveLocalFile(clean);
     if (resolvedFile != null) {
       return Image.file(
@@ -187,6 +231,14 @@ class _IncidentPhotoPreviewState extends State<IncidentPhotoPreview> {
         height: 220,
         width: double.infinity,
         fit: BoxFit.cover,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) return child;
+          return const IncidentShimmerBox(
+            height: 220,
+            width: double.infinity,
+            borderRadius: 14,
+          );
+        },
         errorBuilder: (context, error, stackTrace) => AppPhotoPlaceholder(
           photoPath: clean,
           isDark: isDark,

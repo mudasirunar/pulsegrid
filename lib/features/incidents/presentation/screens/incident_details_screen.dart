@@ -11,6 +11,7 @@ import '../../domain/entities/incident_status.dart';
 import '../bloc/incident_bloc.dart';
 import '../bloc/incident_event.dart';
 import '../bloc/incident_state.dart';
+import '../widgets/incident_details_skeleton.dart';
 import '../widgets/incident_lifecycle_stepper.dart';
 import '../widgets/incident_location_display.dart';
 import '../widgets/incident_photo_preview.dart';
@@ -18,21 +19,29 @@ import '../widgets/incident_status_actions.dart';
 import '../widgets/incident_timeline_view.dart';
 
 class IncidentDetailsScreen extends StatefulWidget {
-  final IncidentEntity incident;
+  final IncidentEntity? incident;
+  final String? incidentId;
   final UserEntity currentUser;
+  final bool isLoading;
 
   const IncidentDetailsScreen({
     super.key,
-    required this.incident,
+    this.incident,
+    this.incidentId,
     required this.currentUser,
-  });
+    this.isLoading = false,
+  }) : assert(
+          incident != null || incidentId != null,
+          'Either incident or incidentId must be provided',
+        );
 
   @override
   State<IncidentDetailsScreen> createState() => _IncidentDetailsScreenState();
 }
 
 class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
-  late IncidentEntity _incident;
+  IncidentEntity? _incident;
+  bool _isLoadingIncident = false;
   List<ActivityEventEntity> _timeline = [];
   bool _isLoadingTimeline = true;
 
@@ -40,14 +49,42 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
   void initState() {
     super.initState();
     _incident = widget.incident;
-    _fetchTimeline();
+    _isLoadingIncident = widget.isLoading || _incident == null;
+    if (!_isLoadingIncident && _incident != null) {
+      _fetchTimeline();
+    } else if (widget.incidentId != null) {
+      _fetchIncidentById(widget.incidentId!);
+    }
+  }
+
+  Future<void> _fetchIncidentById(String id) async {
+    setState(() => _isLoadingIncident = true);
+    try {
+      final repo = context.read<IncidentBloc>().incidentRepository;
+      final fetched = await repo.getIncidentById(id);
+      if (mounted) {
+        setState(() {
+          _incident = fetched;
+          _isLoadingIncident = false;
+        });
+        if (fetched != null) {
+          _fetchTimeline();
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingIncident = false);
+      }
+    }
   }
 
   Future<void> _fetchTimeline() async {
+    final currentIncident = _incident;
+    if (currentIncident == null) return;
     setState(() => _isLoadingTimeline = true);
     try {
       final repo = context.read<IncidentBloc>().incidentRepository;
-      final events = await repo.getActivityTimeline(_incident.id);
+      final events = await repo.getActivityTimeline(currentIncident.id);
       if (mounted) {
         setState(() {
           _timeline = events;
@@ -90,9 +127,11 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
   }
 
   void _onTransitionStatus(IncidentStatus targetStatus) {
+    final currentIncident = _incident;
+    if (currentIncident == null) return;
     context.read<IncidentBloc>().add(
           UpdateIncidentStatusEvent(
-            incidentId: _incident.id,
+            incidentId: currentIncident.id,
             targetStatus: targetStatus,
             actor: widget.currentUser,
           ),
@@ -104,6 +143,19 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    // While loading or before data is available: render smooth skeleton with NO status chip in AppBar!
+    if (_isLoadingIncident || _incident == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Incident Details'),
+          actions: const [],
+        ),
+        body: const IncidentDetailsSkeleton(),
+      );
+    }
+
+    final currentIncident = _incident!;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Incident Details'),
@@ -114,10 +166,10 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _statusColor(_incident.status).withValues(alpha: isDark ? 0.2 : 0.12),
+                  color: _statusColor(currentIncident.status).withValues(alpha: isDark ? 0.2 : 0.12),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _statusColor(_incident.status).withValues(alpha: 0.5),
+                    color: _statusColor(currentIncident.status).withValues(alpha: 0.5),
                     width: 1,
                   ),
                 ),
@@ -129,14 +181,14 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                       height: 6,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _statusColor(_incident.status),
+                        color: _statusColor(currentIncident.status),
                       ),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      _incident.status.displayName.toUpperCase(),
+                      currentIncident.status.displayName.toUpperCase(),
                       style: TextStyle(
-                        color: _statusColor(_incident.status),
+                        color: _statusColor(currentIncident.status),
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.6,
@@ -158,8 +210,8 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
               type: AppSnackBarType.success,
             );
             final updated = state.incidents.firstWhere(
-              (inc) => inc.id == _incident.id,
-              orElse: () => _incident,
+              (inc) => inc.id == currentIncident.id,
+              orElse: () => currentIncident,
             );
             setState(() => _incident = updated);
             _fetchTimeline();
@@ -181,7 +233,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
               children: [
                 // 1. Incident Title
                 Text(
-                  _incident.title,
+                  currentIncident.title,
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.2,
@@ -201,7 +253,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Reported by ${_resolveReporterName(_incident.createdBy)} • ${_formatTimeAgo(_incident.createdAt)}',
+                        'Reported by ${_resolveReporterName(currentIncident.createdBy)} • ${_formatTimeAgo(currentIncident.createdAt)}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                         ),
@@ -222,7 +274,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      _formatDate(_incident.createdAt),
+                      _formatDate(currentIncident.createdAt),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                       ),
@@ -248,13 +300,13 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            _categoryIcon(_incident.category),
+                            _categoryIcon(currentIncident.category),
                             size: 15,
                             color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            _incident.category,
+                            currentIncident.category,
                             style: theme.textTheme.labelMedium?.copyWith(
                               fontWeight: FontWeight.w600,
                               color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
@@ -269,10 +321,10 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: _severityColor(_incident.severity).withValues(alpha: 0.12),
+                        color: _severityColor(currentIncident.severity).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: _severityColor(_incident.severity).withValues(alpha: 0.45),
+                          color: _severityColor(currentIncident.severity).withValues(alpha: 0.45),
                         ),
                       ),
                       child: Row(
@@ -281,14 +333,14 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                           Icon(
                             Icons.crisis_alert_rounded,
                             size: 15,
-                            color: _severityColor(_incident.severity),
+                            color: _severityColor(currentIncident.severity),
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            _incident.severity.displayName,
+                            currentIncident.severity.displayName,
                             style: theme.textTheme.labelMedium?.copyWith(
                               fontWeight: FontWeight.w700,
-                              color: _severityColor(_incident.severity),
+                              color: _severityColor(currentIncident.severity),
                             ),
                           ),
                         ],
@@ -299,9 +351,9 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                 const SizedBox(height: 24),
 
                 // 3. Evidence Photo Preview
-                if (_incident.photoPaths.isNotEmpty) ...[
+                if (currentIncident.photoPaths.isNotEmpty) ...[
                   Text(
-                    'ATTACHED EVIDENCE PHOTOS (${_incident.photoPaths.length})',
+                    'ATTACHED EVIDENCE PHOTOS (${currentIncident.photoPaths.length})',
                     style: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.6,
@@ -309,7 +361,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  IncidentPhotoPreview(photoPaths: _incident.photoPaths),
+                  IncidentPhotoPreview(photoPaths: currentIncident.photoPaths),
                   const SizedBox(height: 24),
                 ],
 
@@ -324,7 +376,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _incident.description,
+                  currentIncident.description,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     height: 1.5,
                   ),
@@ -342,9 +394,9 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                 ),
                 const SizedBox(height: 8),
                 IncidentLocationDisplay(
-                  latitude: _incident.latitude,
-                  longitude: _incident.longitude,
-                  manualLocationNotes: _incident.manualLocationNotes,
+                  latitude: currentIncident.latitude,
+                  longitude: currentIncident.longitude,
+                  manualLocationNotes: currentIncident.manualLocationNotes,
                 ),
                 const SizedBox(height: 28),
 
@@ -358,12 +410,12 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                IncidentLifecycleStepper(currentStatus: _incident.status),
+                IncidentLifecycleStepper(currentStatus: currentIncident.status),
                 const SizedBox(height: 18),
 
                 // 7. Status Transition Actions
                 IncidentStatusActions(
-                  status: _incident.status,
+                  status: currentIncident.status,
                   currentUser: widget.currentUser,
                   isOperating: isOperating,
                   onTransition: _onTransitionStatus,
@@ -384,7 +436,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                   timeline: _timeline,
                   isLoading: _isLoadingTimeline,
                   currentUser: widget.currentUser,
-                  incident: _incident,
+                  incident: currentIncident,
                 ),
                 const SizedBox(height: 32),
               ],
