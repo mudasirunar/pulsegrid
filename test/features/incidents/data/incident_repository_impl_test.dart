@@ -82,6 +82,9 @@ class _InMemoryLocalDataSource implements LocalDataSource {
   Future<Map<String, double>> getResourceSummaryForIncident(String incidentId) async => {};
 
   @override
+  Future<List<Map<String, dynamic>>> getDetailedResourceSummaryForIncident(String incidentId) async => [];
+
+  @override
   Future<void> saveActivityEvent(ActivityEventModel event) async {
     activityEvents.add(event);
   }

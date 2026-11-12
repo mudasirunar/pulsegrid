@@ -31,6 +31,7 @@ abstract class LocalDataSource {
   Future<void> saveResourceLog(ResourceLogModel log);
   Future<List<ResourceLogModel>> getResourceLogsForIncident(String incidentId);
   Future<Map<String, double>> getResourceSummaryForIncident(String incidentId);
+  Future<List<Map<String, dynamic>>> getDetailedResourceSummaryForIncident(String incidentId);
 
   // Activity Events
   Future<void> saveActivityEvent(ActivityEventModel event);
@@ -267,6 +268,22 @@ class LocalDataSourceImpl implements LocalDataSource {
       summary[resourceType] = total;
     }
     return summary;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getDetailedResourceSummaryForIncident(String incidentId) async {
+    final db = await _db;
+    final results = await db.rawQuery('''
+      SELECT 
+        ${DatabaseConstants.colResourceType}, 
+        SUM(${DatabaseConstants.colQuantity}) as total,
+        ${DatabaseConstants.colUnit}
+      FROM ${DatabaseConstants.tableResourceLogs}
+      WHERE ${DatabaseConstants.colIncidentId} = ?
+      GROUP BY ${DatabaseConstants.colResourceType}, ${DatabaseConstants.colUnit}
+      ORDER BY total DESC
+    ''', [incidentId]);
+    return results;
   }
 
   // -------------------------------------------------------------

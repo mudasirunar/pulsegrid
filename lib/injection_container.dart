@@ -13,6 +13,8 @@ import 'features/incidents/domain/repositories/incident_repository.dart';
 import 'features/incidents/domain/services/location_service.dart';
 import 'features/incidents/domain/services/media_service.dart';
 import 'features/incidents/presentation/bloc/incident_bloc.dart';
+import 'features/resources/data/repositories/resource_repository_impl.dart';
+import 'features/resources/domain/repositories/resource_repository.dart';
 
 final sl = GetIt.instance;
 
@@ -54,5 +56,12 @@ Future<void> initInjection() async {
   );
   sl.registerFactory<IncidentBloc>(
     () => IncidentBloc(incidentRepository: sl()),
+  );
+
+  // -------------------------------------------------------------
+  // Resources Feature
+  // -------------------------------------------------------------
+  sl.registerLazySingleton<ResourceRepository>(
+    () => ResourceRepositoryImpl(localDataSource: sl()),
   );
 }
