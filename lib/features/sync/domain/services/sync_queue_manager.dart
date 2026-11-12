@@ -29,7 +29,7 @@ class SyncQueueMetrics {
 
 class SyncQueueManager {
   final SyncRepository syncRepository;
-  final RemoteSyncHandler? remoteSyncHandler;
+  RemoteSyncHandler? remoteSyncHandler;
   final int maxRetries;
   final Duration baseBackoff;
 
@@ -44,6 +44,10 @@ class SyncQueueManager {
     this.maxRetries = 5,
     this.baseBackoff = const Duration(seconds: 1),
   });
+
+  void setRemoteSyncHandler(RemoteSyncHandler handler) {
+    remoteSyncHandler = handler;
+  }
 
   Stream<SyncQueueMetrics> get metricsStream => _metricsController.stream;
   bool get isProcessing => _isProcessing;

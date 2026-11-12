@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
@@ -83,6 +84,38 @@ class PhotoFileResolver {
       return tempPath;
     } catch (_) {
       return tempPath;
+    }
+  }
+
+  /// Converts a local photo file path to a Base64 string for zero-cost Firestore sync.
+  static Future<String?> photoPathToBase64(String path) async {
+    try {
+      final file = resolveLocalFile(path);
+      if (file != null && await file.exists()) {
+        final bytes = await file.readAsBytes();
+        return base64Encode(bytes);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Saves a remote Base64 image payload into local permanent documents storage
+  /// and returns the local file path.
+  static Future<String?> saveBase64Photo(String base64String) async {
+    try {
+      final bytes = base64Decode(base64String);
+      final docsDir = await getDocsDir();
+      final photosDir = Directory('${docsDir.path}/incident_photos');
+      if (!await photosDir.exists()) {
+        await photosDir.create(recursive: true);
+      }
+      final fileName =
+          'evidence_remote_${DateTime.now().millisecondsSinceEpoch}_${base64String.hashCode.abs()}.jpg';
+      final file = File('${photosDir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+      return file.path;
+    } catch (_) {
+      return null;
     }
   }
 }

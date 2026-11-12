@@ -65,6 +65,7 @@ enum SyncOperationType {
         return SyncOperationType.update;
       case 'DELETE':
         return SyncOperationType.delete;
+      case 'INSERT':
       case 'CREATE':
       default:
         return SyncOperationType.create;

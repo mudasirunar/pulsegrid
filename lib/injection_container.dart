@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,8 +17,10 @@ import 'features/incidents/presentation/bloc/incident_bloc.dart';
 import 'features/resources/data/repositories/resource_repository_impl.dart';
 import 'features/resources/domain/repositories/resource_repository.dart';
 import 'features/resources/presentation/cubit/resource_cubit.dart';
+import 'features/sync/data/datasources/firestore_remote_data_source.dart';
 import 'features/sync/data/repositories/sync_repository_impl.dart';
 import 'features/sync/domain/repositories/sync_repository.dart';
+import 'features/sync/domain/services/sync_engine.dart';
 import 'features/sync/domain/services/sync_queue_manager.dart';
 import 'features/sync/presentation/bloc/sync_bloc.dart';
 
@@ -76,11 +79,23 @@ Future<void> initInjection() async {
   // -------------------------------------------------------------
   // Sync Engine & Queue Feature
   // -------------------------------------------------------------
+  sl.registerLazySingleton<FirebaseFirestore>(() => FirebaseFirestore.instance);
+  sl.registerLazySingleton<FirestoreRemoteDataSource>(
+    () => FirestoreRemoteDataSourceImpl(firestore: sl()),
+  );
   sl.registerLazySingleton<SyncRepository>(
     () => SyncRepositoryImpl(localDataSource: sl()),
   );
   sl.registerLazySingleton<SyncQueueManager>(
     () => SyncQueueManager(syncRepository: sl()),
+  );
+  sl.registerLazySingleton<SyncEngine>(
+    () => SyncEngine(
+      queueManager: sl(),
+      remoteDataSource: sl(),
+      localDataSource: sl(),
+      networkInfo: sl(),
+    ),
   );
   sl.registerFactory<SyncBloc>(
     () => SyncBloc(syncQueueManager: sl()),
