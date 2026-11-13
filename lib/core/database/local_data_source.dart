@@ -30,6 +30,8 @@ abstract class LocalDataSource {
   // Assignments
   Future<void> saveAssignment(AssignmentModel assignment);
   Future<AssignmentModel?> getAssignmentByIncidentId(String incidentId);
+  Future<List<AssignmentModel>> getAllAssignments();
+  Future<Map<String, int>> getActiveIncidentCountsByResponder();
   Future<List<IncidentModel>> getIncidentsAssignedTo(String responderId);
 
   // Resource Logs
@@ -199,11 +201,36 @@ class LocalDataSourceImpl implements LocalDataSource {
   @override
   Future<int> deleteIncident(String id) async {
     final db = await _db;
-    final deleted = await db.delete(
-      DatabaseConstants.tableIncidents,
-      where: '${DatabaseConstants.colId} = ?',
-      whereArgs: [id],
-    );
+    final deleted = await db.transaction((txn) async {
+      final count = await txn.delete(
+        DatabaseConstants.tableIncidents,
+        where: '${DatabaseConstants.colId} = ?',
+        whereArgs: [id],
+      );
+      await txn.delete(
+        DatabaseConstants.tableResourceLogs,
+        where: '${DatabaseConstants.colIncidentId} = ?',
+        whereArgs: [id],
+      );
+      await txn.delete(
+        DatabaseConstants.tableActivityEvents,
+        where: '${DatabaseConstants.colIncidentId} = ?',
+        whereArgs: [id],
+      );
+      await txn.delete(
+        DatabaseConstants.tableAssignments,
+        where: '${DatabaseConstants.colIncidentId} = ?',
+        whereArgs: [id],
+      );
+      // Cancel any pending CREATE/UPDATE sync operations for this deleted incident
+      await txn.delete(
+        DatabaseConstants.tableSyncOperations,
+        where:
+            '${DatabaseConstants.colEntityId} = ? AND ${DatabaseConstants.colOperationType} != ?',
+        whereArgs: [id, 'DELETE'],
+      );
+      return count;
+    });
     if (deleted > 0) {
       _tableChangeController.add(DatabaseConstants.tableIncidents);
     }
@@ -221,6 +248,36 @@ class LocalDataSourceImpl implements LocalDataSource {
       assignment.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _tableChangeController.add(DatabaseConstants.tableAssignments);
+  }
+
+  @override
+  Future<List<AssignmentModel>> getAllAssignments() async {
+    final db = await _db;
+    final results = await db.query(DatabaseConstants.tableAssignments);
+    return results.map(AssignmentModel.fromMap).toList();
+  }
+
+  @override
+  Future<Map<String, int>> getActiveIncidentCountsByResponder() async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT a.${DatabaseConstants.colResponderId} AS responderId, COUNT(DISTINCT i.${DatabaseConstants.colId}) AS cnt
+      FROM ${DatabaseConstants.tableAssignments} a
+      INNER JOIN ${DatabaseConstants.tableIncidents} i
+        ON a.${DatabaseConstants.colIncidentId} = i.${DatabaseConstants.colId}
+      WHERE i.${DatabaseConstants.colStatus} NOT IN ('Resolved', 'Closed')
+      GROUP BY a.${DatabaseConstants.colResponderId}
+    ''');
+    final Map<String, int> counts = {};
+    for (final row in rows) {
+      final rid = row['responderId'] as String?;
+      final cnt = (row['cnt'] as num?)?.toInt() ?? 0;
+      if (rid != null) {
+        counts[rid] = cnt;
+      }
+    }
+    return counts;
   }
 
   @override

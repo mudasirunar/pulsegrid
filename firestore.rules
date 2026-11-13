@@ -43,6 +43,11 @@ service cloud.firestore {
     //   - activity_events/{eventId}
     //   - assignments/{assignmentId}
     //
+    // Collection: deleted_incidents
+    // Document ID: {incidentId}
+    //   - Lightweight (~50-byte) tombstone marker written when incidents are
+    //     hard-deleted so offline and concurrent devices never resurrect them.
+    //
     // ===============================================================
 
     // ===============================================================
@@ -64,10 +69,11 @@ service cloud.firestore {
     // ===============================================================
 
     // 1. Users Collection
-    // Strict privacy: A user can ONLY read and write their own profile document.
-    // Reading or modifying any other user's data is strictly forbidden.
+    // Authenticated users can read user profiles (e.g., Coordinators querying
+    // responders for the Responder Picker), while writes remain strictly owner-only.
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
     }
 
     // 2. Incident Coordination Collections
@@ -103,6 +109,13 @@ service cloud.firestore {
     }
 
     match /assignments/{assignmentId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // 4. Deleted Incidents Tombstone Collection
+    // Lightweight (~50-byte) tombstone markers written when incidents are hard-deleted
+    // so offline and concurrent devices never resurrect deleted incidents.
+    match /deleted_incidents/{incidentId} {
       allow read, write: if isAuthenticated();
     }
 

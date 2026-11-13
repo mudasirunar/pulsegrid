@@ -73,6 +73,12 @@ class _InMemoryLocalDataSource implements LocalDataSource {
   Future<AssignmentModel?> getAssignmentByIncidentId(String incidentId) async => null;
 
   @override
+  Future<List<AssignmentModel>> getAllAssignments() async => const [];
+
+  @override
+  Future<Map<String, int>> getActiveIncidentCountsByResponder() async => const {};
+
+  @override
   Future<List<IncidentModel>> getIncidentsAssignedTo(String responderId) async => [];
 
   @override

@@ -93,11 +93,16 @@ class IncidentTimelineView extends StatelessWidget {
       }
 
       // 2. If events has no status changes but incident has progressed beyond newIncident,
-      // backfill intermediate milestones
+      // backfill intermediate milestones (skipping Assigned if an assignmentChange event exists)
       final currentIdx = lifecycleOrder.indexOf(incident!.status);
+      final hasAssignmentEvent =
+          events.any((e) => e.eventType == ActivityEventType.assignmentChange);
       if (events.where((e) => e.eventType == ActivityEventType.statusChange).isEmpty && currentIdx > 0) {
         for (int i = 1; i <= currentIdx; i++) {
           final status = lifecycleOrder[i];
+          if (status == IncidentStatus.assigned && hasAssignmentEvent) {
+            continue;
+          }
           final stepTime = i == currentIdx
               ? incident!.updatedAt
               : incident!.createdAt.add(Duration(minutes: i * 5));
@@ -153,9 +158,13 @@ class IncidentTimelineView extends StatelessWidget {
           final oldStatusClean = ev.oldValue!.replaceAll('IncidentStatus.', '').toLowerCase();
           if (oldStatusClean != 'new' && oldStatusClean != 'newincident') {
             final hasPredecessor = events.any(
-              (e) => e.eventType == ActivityEventType.statusChange &&
-                     e.newValue?.replaceAll('IncidentStatus.', '').toLowerCase() == oldStatusClean &&
-                     e.timestamp.isBefore(ev.timestamp),
+              (e) =>
+                  (e.eventType == ActivityEventType.statusChange &&
+                      e.newValue?.replaceAll('IncidentStatus.', '').toLowerCase() == oldStatusClean &&
+                      e.timestamp.isBefore(ev.timestamp)) ||
+                  (oldStatusClean == 'assigned' &&
+                      e.eventType == ActivityEventType.assignmentChange &&
+                      e.timestamp.isBefore(ev.timestamp)),
             );
             if (!hasPredecessor) {
               final predStatus = lifecycleOrder.firstWhere(
@@ -306,6 +315,8 @@ class IncidentTimelineView extends StatelessWidget {
     switch (event.eventType) {
       case ActivityEventType.incidentCreated:
         return 'Incident Reported';
+      case ActivityEventType.incidentEdited:
+        return 'Incident Edited';
       case ActivityEventType.statusChange:
         final oldVal = event.oldValue?.replaceAll('IncidentStatus.', '').toLowerCase();
         final newVal = event.newValue?.replaceAll('IncidentStatus.', '').toLowerCase();
@@ -320,7 +331,10 @@ class IncidentTimelineView extends StatelessWidget {
         }
         return 'Status Updated';
       case ActivityEventType.assignmentChange:
-        return 'Assignment Updated';
+        if (event.oldValue != null && event.oldValue!.trim().isNotEmpty) {
+          return 'Responder Reassigned';
+        }
+        return 'Responder Assigned';
       case ActivityEventType.resourceLogged:
         return 'Resource Logged';
       case ActivityEventType.conflictResolved:
@@ -336,6 +350,14 @@ class IncidentTimelineView extends StatelessWidget {
         event.oldValue != null &&
         event.newValue != null) {
       parts.add('${_cleanStatus(event.oldValue!)} → ${_cleanStatus(event.newValue!)}');
+    } else if (event.eventType == ActivityEventType.assignmentChange &&
+        event.newValue != null &&
+        event.newValue!.trim().isNotEmpty) {
+      if (event.oldValue != null && event.oldValue!.trim().isNotEmpty) {
+        parts.add('${event.oldValue!.trim()} → ${event.newValue!.trim()}');
+      } else {
+        parts.add('Assigned to ${event.newValue!.trim()}');
+      }
     } else if (event.newValue != null &&
         event.newValue!.trim().isNotEmpty &&
         event.eventType != ActivityEventType.statusChange) {

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/database/database_constants.dart';
+import '../../../../core/database/local_data_source.dart';
 import '../../../../core/network/network_info.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/photo_file_resolver.dart';
@@ -14,7 +16,10 @@ import '../../../../core/widgets/app_snackbar.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../injection_container.dart';
 import '../../../auth/domain/entities/user_entity.dart';
+import '../../../sync/domain/services/sync_engine.dart';
+import '../../domain/entities/incident_entity.dart';
 import '../../domain/entities/incident_severity.dart';
+import '../../domain/logic/incident_permissions.dart';
 import '../../domain/services/location_service.dart';
 import '../../domain/services/media_service.dart';
 import '../bloc/incident_bloc.dart';
@@ -23,6 +28,7 @@ import '../bloc/incident_state.dart';
 
 class CreateIncidentScreen extends StatefulWidget {
   final UserEntity currentUser;
+  final IncidentEntity? existingIncident;
   final LocationService? locationService;
   final MediaService? mediaService;
   final NetworkInfo? networkInfo;
@@ -30,6 +36,7 @@ class CreateIncidentScreen extends StatefulWidget {
   const CreateIncidentScreen({
     super.key,
     required this.currentUser,
+    this.existingIncident,
     this.locationService,
     this.mediaService,
     this.networkInfo,
@@ -73,6 +80,12 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
 
   String? _titleError;
   String? _descriptionError;
+  StreamSubscription<String>? _remoteDeleteSubscription;
+  StreamSubscription<String>? _tableSubscription;
+  bool _hasShownRemoteDeleteDialog = false;
+  bool _hasShownReassignedDialog = false;
+
+  bool get _isEditMode => widget.existingIncident != null;
 
   static const List<String> _categories = [
     'Medical',
@@ -94,10 +107,109 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
         (sl.isRegistered<NetworkInfo>()
             ? sl<NetworkInfo>()
             : _FallbackNetworkInfo());
+
+    final existing = widget.existingIncident;
+    if (existing != null) {
+      _titleController.text = existing.title;
+      _descriptionController.text = existing.description;
+      _locationNotesController.text = existing.manualLocationNotes ?? '';
+      _selectedSeverity = existing.severity;
+      _latitude = existing.latitude;
+      _longitude = existing.longitude;
+      _photoPaths.addAll(existing.photoPaths);
+
+      if (_categories.contains(existing.category)) {
+        _selectedCategory = existing.category;
+      } else {
+        _selectedCategory = 'Other';
+        _customCategoryController.text = existing.category;
+      }
+
+      if (sl.isRegistered<SyncEngine>()) {
+        _remoteDeleteSubscription = sl<SyncEngine>()
+            .onIncidentDeletedRemote
+            .listen((deletedId) {
+          if (!mounted || _hasShownRemoteDeleteDialog) return;
+          if (deletedId == existing.id) {
+            _showRemoteDeletedDialog();
+          }
+        });
+      }
+      if (sl.isRegistered<LocalDataSource>()) {
+        _tableSubscription =
+            sl<LocalDataSource>().onTableChanged.listen((table) async {
+          if (!mounted ||
+              table != DatabaseConstants.tableAssignments ||
+              _hasShownReassignedDialog ||
+              _hasShownRemoteDeleteDialog) {
+            return;
+          }
+          final assignment = await sl<LocalDataSource>()
+              .getAssignmentByIncidentId(existing.id);
+          if (!mounted ||
+              _hasShownReassignedDialog ||
+              _hasShownRemoteDeleteDialog) {
+            return;
+          }
+          if (!IncidentPermissions.canEditOrDelete(
+            incident: existing,
+            user: widget.currentUser,
+            assignment: assignment,
+          )) {
+            _showReassignedDialog();
+          }
+        });
+      }
+    }
+  }
+
+  void _showReassignedDialog() {
+    if (_hasShownReassignedDialog || !mounted) return;
+    _hasShownReassignedDialog = true;
+    FocusScope.of(context).unfocus();
+    AppDialog.show<void>(
+      context: context,
+      title: 'Incident Reassigned',
+      message:
+          'This incident was reassigned to another responder. You no longer have permission to edit it.',
+      icon: Icons.swap_horiz_rounded,
+      isDestructive: true,
+      barrierDismissible: false,
+      cancelText: null,
+      confirmText: 'Go Back',
+      onConfirm: () {
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+    );
+  }
+
+  void _showRemoteDeletedDialog() {
+    if (_hasShownRemoteDeleteDialog || !mounted) return;
+    _hasShownRemoteDeleteDialog = true;
+    AppDialog.show<void>(
+      context: context,
+      title: 'Incident Deleted',
+      message:
+          'This incident was deleted by another user or device and is no longer available.',
+      icon: Icons.delete_forever_outlined,
+      isDestructive: true,
+      barrierDismissible: false,
+      cancelText: null,
+      confirmText: 'Go Back',
+      onConfirm: () {
+        if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      },
+    );
   }
 
   @override
   void dispose() {
+    _tableSubscription?.cancel();
+    _remoteDeleteSubscription?.cancel();
     _detectingTimer?.cancel();
     _scrollController.dispose();
     _titleController.dispose();
@@ -362,6 +474,17 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
     });
   }
 
+  void _clearCoordinates() {
+    _detectingTimer?.cancel();
+    setState(() {
+      _latitude = null;
+      _longitude = null;
+      _detectedAddress = null;
+      _showAddressSuggestion = false;
+      _isResolvingAddress = false;
+    });
+  }
+
   void _onSubmit() {
     final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
@@ -393,6 +516,35 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
             _customCategoryController.text.trim().isNotEmpty)
         ? _customCategoryController.text.trim()
         : _selectedCategory;
+
+    if (_isEditMode) {
+      final existing = widget.existingIncident!;
+      final updated = IncidentEntity(
+        id: existing.id,
+        title: title,
+        category: category,
+        severity: _selectedSeverity,
+        description: description,
+        status: existing.status,
+        version: existing.version,
+        latitude: _latitude,
+        longitude: _longitude,
+        manualLocationNotes: _locationNotesController.text.trim().isNotEmpty
+            ? _locationNotesController.text.trim()
+            : null,
+        photoPaths: List<String>.from(_photoPaths),
+        createdBy: existing.createdBy,
+        createdAt: existing.createdAt,
+        updatedAt: existing.updatedAt,
+      );
+      context.read<IncidentBloc>().add(
+            UpdateIncidentEvent(
+              updatedIncident: updated,
+              actor: widget.currentUser,
+            ),
+          );
+      return;
+    }
 
     context.read<IncidentBloc>().add(
       CreateIncidentEvent(
@@ -541,22 +693,35 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Report New Incident'), elevation: 0),
+      appBar: AppBar(
+        title: Text(_isEditMode ? 'Edit Incident' : 'Report New Incident'),
+        elevation: 0,
+      ),
       body: BlocConsumer<IncidentBloc, IncidentState>(
         listener: (context, state) {
-          if (state is IncidentCreatedSuccess) {
+          if (state is IncidentCreatedSuccess && !_isEditMode) {
             AppSnackBar.showSuccess(
               context,
               'Incident "${state.incident.title}" recorded and queued for sync.',
               title: 'Incident Logged',
             );
             Navigator.of(context).pop();
+          } else if (state is IncidentOperationSuccess && _isEditMode) {
+            AppSnackBar.showSuccess(
+              context,
+              state.message,
+              title: 'Incident Updated',
+            );
+            Navigator.of(context).pop(state.incident);
+          } else if (state is IncidentOperationFailure) {
+            AppSnackBar.showError(context, state.message);
           } else if (state is IncidentError) {
             AppSnackBar.showError(context, state.message);
           }
         },
         builder: (context, state) {
-          final isSubmitting = state is IncidentCreating;
+          final isSubmitting =
+              state is IncidentCreating || state is IncidentOperating;
           final sectionHeadingStyle = theme.textTheme.labelMedium?.copyWith(
             fontWeight: FontWeight.w600,
             color: isDark
@@ -817,6 +982,25 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
+                      if (_latitude != null && !_isCapturingLocation) ...[
+                        SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            tooltip: 'Clear GPS coordinates',
+                            icon: Icon(
+                              Icons.close_rounded,
+                              size: 19,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                            ),
+                            onPressed: isSubmitting ? null : _clearCoordinates,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       SizedBox(
                         width: 36,
                         height: 36,
@@ -835,9 +1019,7 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
                                       ? 'Recapture GPS'
                                       : 'Capture GPS',
                                   icon: Icon(
-                                    _latitude != null
-                                        ? Icons.refresh_rounded
-                                        : Icons.my_location_rounded,
+                                    Icons.my_location_rounded,
                                     size: 20,
                                     color: isDark
                                         ? AppColors.accentDark
@@ -1167,7 +1349,7 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
 
                 // 7. Submit Action Button
                 AppButton(
-                  text: 'Report Incident',
+                  text: _isEditMode ? 'Save Changes' : 'Report Incident',
                   isLoading: isSubmitting,
                   isDisabled: isSubmitting,
                   borderRadius: 24.0,

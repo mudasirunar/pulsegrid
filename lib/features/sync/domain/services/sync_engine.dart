@@ -6,7 +6,9 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/database/database_constants.dart';
 import '../../../../core/database/local_data_source.dart';
 import '../../../../core/network/network_info.dart';
+import '../../../../core/utils/photo_file_resolver.dart';
 import '../../../incidents/data/models/activity_event_model.dart';
+import '../../../incidents/data/models/assignment_model.dart';
 import '../../../incidents/data/models/incident_model.dart';
 import '../../../resources/data/models/resource_log_model.dart';
 import '../../data/datasources/firestore_remote_data_source.dart';
@@ -34,9 +36,27 @@ class SyncEngine {
 
   StreamSubscription<bool>? _connectivitySubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _remoteIncidentsSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _remoteAssignmentsSubscription;
+  StreamSubscription<String>? _remoteRemovedSubscription;
+  StreamSubscription<List<String>>? _remoteDeletedTombstoneSubscription;
   StreamSubscription<String>? _tableSubscription;
   StreamSubscription<User?>? _authSubscription;
   bool _isSyncing = false;
+
+  final StreamController<String> _deletedIncidentController =
+      StreamController<String>.broadcast();
+  final Set<String> _knownDeletedIds = {};
+  final Set<String> _selfDeletingIds = {};
+
+  /// Emits incident IDs that were deleted remotely by another user or device.
+  Stream<String> get onIncidentDeletedRemote => _deletedIncidentController.stream;
+
+  /// Marks an incident ID as being deleted by the current device so self-deletes
+  /// do not trigger the "deleted by another user" alert dialog.
+  void markSelfDeleting(String incidentId) {
+    _selfDeletingIds.add(incidentId);
+    _knownDeletedIds.add(incidentId);
+  }
 
   SyncEngine({
     required this.queueManager,
@@ -92,21 +112,65 @@ class SyncEngine {
     }
   }
 
+  Future<void> _handleRemoteDeletion(String incidentId) async {
+    _knownDeletedIds.add(incidentId);
+    final existing = await localDataSource.getIncidentById(incidentId);
+    if (existing != null) {
+      await localDataSource.deleteIncident(incidentId);
+      if (existing.photoPaths.isNotEmpty) {
+        await _cleanupUnreferencedPhotos(existing.photoPaths);
+      }
+    }
+    if (!_selfDeletingIds.contains(incidentId) &&
+        !_deletedIncidentController.isClosed) {
+      _deletedIncidentController.add(incidentId);
+    }
+  }
+
   Future<void> _mergeAndSaveRemoteIncident(IncidentModel model) async {
+    if (_knownDeletedIds.contains(model.id)) {
+      return;
+    }
     final local = await localDataSource.getIncidentById(model.id);
     if (local == null) {
       await localDataSource.saveIncident(model);
       return;
     }
-    if (model.version < local.version) {
+
+    // Last-Write-Wins (LWW) by UTC updatedAt timestamp
+    final remoteTime = model.updatedAt.toUtc();
+    final localTime = local.updatedAt.toUtc();
+    if (remoteTime.isBefore(localTime)) {
       return;
     }
-    final effective = (model.photoPaths.isEmpty && local.photoPaths.isNotEmpty)
+    if (remoteTime.isAtSameMomentAs(localTime) && model.version < local.version) {
+      return;
+    }
+
+    final effective = (model.photoPaths.isEmpty &&
+            local.photoPaths.isNotEmpty &&
+            remoteTime.isAtSameMomentAs(localTime))
         ? model.copyWith(photoPaths: local.photoPaths)
         : model;
     if (effective != local) {
       await localDataSource.saveIncident(effective);
+      final removedPhotos = local.photoPaths
+          .where((p) => !effective.photoPaths.contains(p))
+          .toList();
+      if (removedPhotos.isNotEmpty) {
+        await _cleanupUnreferencedPhotos(removedPhotos);
+      }
     }
+  }
+
+  Future<void> _cleanupUnreferencedPhotos(List<String> candidatePaths) async {
+    if (candidatePaths.isEmpty) return;
+    final allIncidents = await localDataSource.getAllIncidents();
+    final stillReferenced = allIncidents.expand((i) => i.photoPaths);
+    await PhotoFileResolver.deleteUnreferencedPhotos(
+      candidatePaths: candidatePaths,
+      stillReferencedPaths: stillReferenced,
+    );
   }
 
   void _startListeningToRemote() {
@@ -130,11 +194,63 @@ class SyncEngine {
         });
       },
     );
+
+    _remoteRemovedSubscription?.cancel();
+    _remoteRemovedSubscription = remoteDataSource.watchRemovedIncidentIds().listen(
+      (removedId) async {
+        await _handleRemoteDeletion(removedId);
+      },
+      onError: (_) {},
+    );
+
+    _remoteDeletedTombstoneSubscription?.cancel();
+    _remoteDeletedTombstoneSubscription =
+        remoteDataSource.watchDeletedIncidentIds().listen(
+      (deletedIds) async {
+        for (final id in deletedIds) {
+          await _handleRemoteDeletion(id);
+        }
+      },
+      onError: (_) {},
+    );
+
+    _remoteAssignmentsSubscription?.cancel();
+    _remoteAssignmentsSubscription =
+        remoteDataSource.watchAllAssignments().listen(
+      (assignmentsData) async {
+        for (final data in assignmentsData) {
+          try {
+            final model = AssignmentModel.fromMap(data);
+            await _mergeAndSaveRemoteAssignment(model);
+          } catch (_) {}
+        }
+      },
+      onError: (_) {},
+    );
+  }
+
+  Future<void> _mergeAndSaveRemoteAssignment(AssignmentModel model) async {
+    if (_knownDeletedIds.contains(model.incidentId)) return;
+    final local =
+        await localDataSource.getAssignmentByIncidentId(model.incidentId);
+    if (local != null &&
+        model.assignedAt.toUtc().isBefore(local.assignedAt.toUtc())) {
+      return;
+    }
+    if (local != model) {
+      await localDataSource.saveAssignment(model);
+    }
   }
 
   void _stopListeningToRemote() {
     _remoteIncidentsSubscription?.cancel();
     _remoteIncidentsSubscription = null;
+    _remoteRemovedSubscription?.cancel();
+    _remoteRemovedSubscription = null;
+    _remoteDeletedTombstoneSubscription?.cancel();
+    _remoteDeletedTombstoneSubscription = null;
+    _remoteAssignmentsSubscription?.cancel();
+    _remoteAssignmentsSubscription = null;
   }
 
   /// Triggers an immediate background push of queued operations without blocking the caller.
@@ -191,7 +307,21 @@ class SyncEngine {
 
     final incSub = remoteDataSource.watchIncident(incidentId).listen(
       (incidentData) async {
-        if (incidentData == null) return;
+        if (incidentData == null) {
+          // Only treat null (!doc.exists) as remote deletion if it is not a
+          // freshly created offline incident waiting to be uploaded.
+          final allOps = await localDataSource.getAllSyncOperations();
+          final hasPendingCreate = allOps.any(
+            (op) =>
+                op.entityId == incidentId &&
+                op.entityType == 'INCIDENT' &&
+                op.operationType == 'CREATE',
+          );
+          if (!hasPendingCreate) {
+            await _handleRemoteDeletion(incidentId);
+          }
+          return;
+        }
         try {
           final model = IncidentModel.fromMap(incidentData);
           await _mergeAndSaveRemoteIncident(model);
@@ -200,7 +330,19 @@ class SyncEngine {
       onError: (_) {},
     );
 
-    return ScopedIncidentSubscription([logSub, eventSub, incSub]);
+    final assignSub = remoteDataSource.watchAssignments(incidentId).listen(
+      (assignmentsData) async {
+        for (final data in assignmentsData) {
+          try {
+            final model = AssignmentModel.fromMap(data);
+            await _mergeAndSaveRemoteAssignment(model);
+          } catch (_) {}
+        }
+      },
+      onError: (_) {},
+    );
+
+    return ScopedIncidentSubscription([logSub, eventSub, incSub, assignSub]);
   }
 
   /// Handles dispatching an individual queued mutation to Cloud Firestore.
@@ -210,9 +352,16 @@ class SyncEngine {
     switch (operation.entityType) {
       case SyncEntityType.incident:
         if (operation.operationType == SyncOperationType.delete) {
+          _selfDeletingIds.add(operation.entityId);
           await remoteDataSource.deleteIncident(operation.entityId);
         } else {
-          await remoteDataSource.pushIncident(payloadMap);
+          final isUpdate = operation.operationType == SyncOperationType.update;
+          try {
+            await remoteDataSource.pushIncident(payloadMap, isUpdate: isUpdate);
+          } on IncidentRemotelyDeletedException {
+            // Delete Always Wins: purge local copy & complete op without retrying
+            await _handleRemoteDeletion(operation.entityId);
+          }
         }
         break;
 
@@ -225,7 +374,7 @@ class SyncEngine {
         break;
 
       case SyncEntityType.assignment:
-        // Handled via incident update
+        await remoteDataSource.pushAssignment(payloadMap);
         break;
     }
   }
@@ -256,6 +405,13 @@ class SyncEngine {
   /// and enqueues any local-only records that were never tracked in sync_operations.
   Future<void> pullRemoteUpdates() async {
     try {
+      // 0. Pull deleted tombstones first so deleted incidents are purged and never resurrected
+      final deletedIds = await remoteDataSource.pullDeletedIncidentIds();
+      _knownDeletedIds.addAll(deletedIds);
+      for (final deletedId in deletedIds) {
+        await _handleRemoteDeletion(deletedId);
+      }
+
       final remoteIncidents = await remoteDataSource.pullIncidents();
       final remoteIncidentIds = <String>{};
       for (final incData in remoteIncidents) {
@@ -288,6 +444,15 @@ class SyncEngine {
         } catch (_) {}
       }
 
+      // Pull assignments
+      final remoteAssignments = await remoteDataSource.pullAssignments();
+      for (final assignData in remoteAssignments) {
+        try {
+          final model = AssignmentModel.fromMap(assignData);
+          await _mergeAndSaveRemoteAssignment(model);
+        } catch (_) {}
+      }
+
       // Reconcile any local-only entities missing from both sync_operations and Firestore
       final allOps = await localDataSource.getAllSyncOperations();
       final trackedEntityIds = allOps.map((op) => op.entityId).toSet();
@@ -295,6 +460,9 @@ class SyncEngine {
 
       final allIncidents = await localDataSource.getAllIncidents();
       for (final incident in allIncidents) {
+        if (_knownDeletedIds.contains(incident.id)) {
+          continue;
+        }
         if (!trackedEntityIds.contains(incident.id) &&
             !remoteIncidentIds.contains(incident.id)) {
           final syncOp = SyncOperationEntity(
@@ -363,7 +531,11 @@ class SyncEngine {
   void dispose() {
     _connectivitySubscription?.cancel();
     _remoteIncidentsSubscription?.cancel();
+    _remoteAssignmentsSubscription?.cancel();
+    _remoteRemovedSubscription?.cancel();
+    _remoteDeletedTombstoneSubscription?.cancel();
     _tableSubscription?.cancel();
     _authSubscription?.cancel();
+    _deletedIncidentController.close();
   }
 }

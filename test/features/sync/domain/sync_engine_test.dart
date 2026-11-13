@@ -43,11 +43,16 @@ class _FakeFirestoreRemoteDataSource implements FirestoreRemoteDataSource {
   final List<String> deletedIncidentIds = [];
 
   List<Map<String, dynamic>> stubbedRemoteIncidents = [];
+  Set<String> stubbedDeletedIncidentIds = {};
   List<Map<String, dynamic>> stubbedRemoteResources = [];
   List<Map<String, dynamic>> stubbedRemoteEvents = [];
 
   final StreamController<List<Map<String, dynamic>>> incidentsController =
       StreamController<List<Map<String, dynamic>>>.broadcast();
+  final StreamController<String> removedIdsController =
+      StreamController<String>.broadcast();
+  final StreamController<List<String>> deletedTombstonesController =
+      StreamController<List<String>>.broadcast();
   final StreamController<Map<String, dynamic>?> singleIncidentController =
       StreamController<Map<String, dynamic>?>.broadcast();
   final StreamController<List<Map<String, dynamic>>> resourcesController =
@@ -57,6 +62,12 @@ class _FakeFirestoreRemoteDataSource implements FirestoreRemoteDataSource {
 
   @override
   Stream<List<Map<String, dynamic>>> watchIncidents() => incidentsController.stream;
+
+  @override
+  Stream<String> watchRemovedIncidentIds() => removedIdsController.stream;
+
+  @override
+  Stream<List<String>> watchDeletedIncidentIds() => deletedTombstonesController.stream;
 
   @override
   Stream<Map<String, dynamic>?> watchIncident(String incidentId) =>
@@ -71,7 +82,10 @@ class _FakeFirestoreRemoteDataSource implements FirestoreRemoteDataSource {
       eventsController.stream;
 
   @override
-  Future<void> pushIncident(Map<String, dynamic> incidentData) async {
+  Future<void> pushIncident(
+    Map<String, dynamic> incidentData, {
+    bool isUpdate = false,
+  }) async {
     pushedIncidents.add(incidentData);
   }
 
@@ -86,12 +100,30 @@ class _FakeFirestoreRemoteDataSource implements FirestoreRemoteDataSource {
   }
 
   @override
+  Future<void> pushAssignment(Map<String, dynamic> assignmentData) async {}
+
+  @override
+  Future<List<Map<String, dynamic>>> pullAssignments({String? incidentId}) async => const [];
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchResponders() async => const [];
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchAllAssignments() => const Stream.empty();
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchAssignments(String incidentId) => const Stream.empty();
+
+  @override
   Future<void> deleteIncident(String incidentId) async {
     deletedIncidentIds.add(incidentId);
   }
 
   @override
   Future<List<Map<String, dynamic>>> pullIncidents() async => stubbedRemoteIncidents;
+
+  @override
+  Future<Set<String>> pullDeletedIncidentIds() async => stubbedDeletedIncidentIds;
 
   @override
   Future<List<Map<String, dynamic>>> pullResourceLogs({String? incidentId}) async =>
@@ -181,6 +213,10 @@ class _FakeLocalDataSource implements LocalDataSource {
   Future<void> saveAssignment(AssignmentModel assignment) async {}
   @override
   Future<AssignmentModel?> getAssignmentByIncidentId(String incidentId) async => null;
+  @override
+  Future<List<AssignmentModel>> getAllAssignments() async => const [];
+  @override
+  Future<Map<String, int>> getActiveIncidentCountsByResponder() async => const {};
   @override
   Future<List<IncidentModel>> getOpenIncidents() async =>
       incidents.values.where((i) => i.status.toUpperCase() != 'CLOSED' && i.status.toUpperCase() != 'RESOLVED').toList();
@@ -496,5 +532,95 @@ void main() {
     expect(fakeRemote.pushedIncidents.length, 1);
     expect(fakeRemote.pushedIncidents.first['id'], 'inc-auto-1');
     expect(fakeSyncRepo.ops.first.status, SyncStatus.synced);
+  });
+
+  test('Last-Write-Wins: newer remote updatedAt overwrites local even with same version; older is ignored', () async {
+    final t1 = DateTime.utc(2026, 11, 13, 10, 0, 0, 0);
+    final t2 = DateTime.utc(2026, 11, 13, 10, 0, 0, 1); // 1ms later
+    final t0 = DateTime.utc(2026, 11, 13, 9, 59, 59, 999); // 1ms earlier
+
+    await fakeLocal.saveIncident(
+      IncidentModel(
+        id: 'inc-lww-1',
+        title: 'Local Version',
+        category: 'Fire',
+        severity: 'High',
+        description: 'Local desc',
+        status: 'New',
+        version: 2,
+        createdBy: 'u1',
+        createdAt: t0,
+        updatedAt: t1,
+      ),
+    );
+
+    await syncEngine.initialize();
+
+    // 1. Older remote update (1ms earlier) is ignored
+    fakeRemote.incidentsController.add([
+      {
+        'id': 'inc-lww-1',
+        'title': 'Stale Remote Version',
+        'category': 'Fire',
+        'severity': 'High',
+        'description': 'Stale',
+        'status': 'New',
+        'version': 2,
+        'createdBy': 'u1',
+        'createdAt': t0.toIso8601String(),
+        'updatedAt': t0.toIso8601String(),
+      }
+    ]);
+    await pumpEventQueue();
+    expect((await fakeLocal.getIncidentById('inc-lww-1'))?.title, 'Local Version');
+
+    // 2. Newer remote update (1ms later) overwrites local
+    fakeRemote.incidentsController.add([
+      {
+        'id': 'inc-lww-1',
+        'title': 'Newer Remote Version',
+        'category': 'Fire',
+        'severity': 'Critical',
+        'description': 'Updated',
+        'status': 'New',
+        'version': 2,
+        'createdBy': 'u1',
+        'createdAt': t0.toIso8601String(),
+        'updatedAt': t2.toIso8601String(),
+      }
+    ]);
+    await pumpEventQueue();
+    final after = await fakeLocal.getIncidentById('inc-lww-1');
+    expect(after?.title, 'Newer Remote Version');
+    expect(after?.severity, 'Critical');
+  });
+
+  test('Remote deletion tombstone purges local SQLite and broadcasts on onIncidentDeletedRemote', () async {
+    final now = DateTime.utc(2026, 11, 13, 10, 0);
+    await fakeLocal.saveIncident(
+      IncidentModel(
+        id: 'inc-del-1',
+        title: 'To Be Deleted Remotely',
+        category: 'Medical',
+        severity: 'Low',
+        description: 'desc',
+        status: 'New',
+        version: 1,
+        createdBy: 'u1',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    final deletedEvents = <String>[];
+    final sub = syncEngine.onIncidentDeletedRemote.listen(deletedEvents.add);
+
+    await syncEngine.initialize();
+    fakeRemote.deletedTombstonesController.add(['inc-del-1']);
+    await pumpEventQueue();
+
+    expect(await fakeLocal.getIncidentById('inc-del-1'), isNull);
+    expect(deletedEvents, contains('inc-del-1'));
+    await sub.cancel();
   });
 }

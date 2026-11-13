@@ -31,6 +31,9 @@ class IncidentStatusActions extends StatelessWidget {
     // 1. Standard forward advancement statuses (New -> Assigned -> In Progress -> Resolved)
     final nextStatus = _nextAdvancementStatus;
     if (nextStatus != null) {
+      if (nextStatus == IncidentStatus.assigned && !isCoordinator) {
+        return const SizedBox.shrink();
+      }
       return AppButton(
         text: 'Advance Status',
         borderRadius: 24.0,

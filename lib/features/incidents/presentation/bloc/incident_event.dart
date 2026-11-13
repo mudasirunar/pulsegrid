@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import '../../../auth/domain/entities/user_entity.dart';
+import '../../domain/entities/incident_entity.dart';
 import '../../domain/entities/incident_severity.dart';
 import '../../domain/entities/incident_status.dart';
 
@@ -84,5 +85,46 @@ class UpdateIncidentStatusEvent extends IncidentEvent {
 
   @override
   List<Object?> get props => [incidentId, targetStatus, actor];
+}
+
+class UpdateIncidentEvent extends IncidentEvent {
+  final IncidentEntity updatedIncident;
+  final UserEntity actor;
+
+  const UpdateIncidentEvent({
+    required this.updatedIncident,
+    required this.actor,
+  });
+
+  @override
+  List<Object?> get props => [updatedIncident, actor];
+}
+
+class DeleteIncidentEvent extends IncidentEvent {
+  final String incidentId;
+  final UserEntity actor;
+
+  const DeleteIncidentEvent({
+    required this.incidentId,
+    required this.actor,
+  });
+
+  @override
+  List<Object?> get props => [incidentId, actor];
+}
+
+class AssignResponderEvent extends IncidentEvent {
+  final String incidentId;
+  final UserEntity responder;
+  final UserEntity actor;
+
+  const AssignResponderEvent({
+    required this.incidentId,
+    required this.responder,
+    required this.actor,
+  });
+
+  @override
+  List<Object?> get props => [incidentId, responder, actor];
 }
 

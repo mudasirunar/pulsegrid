@@ -7,7 +7,8 @@ enum ActivityEventType {
   assignmentChange('ASSIGNMENT_CHANGE'),
   resourceLogged('RESOURCE_LOGGED'),
   conflictResolved('CONFLICT_RESOLVED'),
-  incidentCreated('INCIDENT_CREATED');
+  incidentCreated('INCIDENT_CREATED'),
+  incidentEdited('INCIDENT_EDITED');
 
   final String value;
   const ActivityEventType(this.value);

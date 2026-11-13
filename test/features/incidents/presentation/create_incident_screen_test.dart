@@ -170,7 +170,32 @@ class _MockRepo implements IncidentRepository {
   }
 
   @override
+  Future<IncidentEntity> updateIncident({
+    required IncidentEntity updatedIncident,
+    required UserEntity actor,
+  }) async => updatedIncident;
+
+  @override
+  Future<void> deleteIncident({
+    required String incidentId,
+    required UserEntity actor,
+  }) async {}
+
+  @override
   Future<List<ActivityEventEntity>> getActivityTimeline(String incidentId) async => [];
+
+  @override
+  Future<IncidentEntity> assignResponder({
+    required String incidentId,
+    required UserEntity responder,
+    required UserEntity actor,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<List<UserEntity>> getResponders({bool forceRefresh = false}) async => const [];
+
+  @override
+  Future<Map<String, int>> getResponderActiveCounts() async => const {};
 }
 
 void main() {

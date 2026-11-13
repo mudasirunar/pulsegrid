@@ -13,12 +13,14 @@ import 'log_resource_bottom_sheet.dart';
 class IncidentResourceSummaryCard extends StatefulWidget {
   final String incidentId;
   final UserEntity currentUser;
+  final bool? canLogResources;
   final VoidCallback? onResourceLogged;
 
   const IncidentResourceSummaryCard({
     super.key,
     required this.incidentId,
     required this.currentUser,
+    this.canLogResources,
     this.onResourceLogged,
   });
 
@@ -80,8 +82,9 @@ class _IncidentResourceSummaryCardState extends State<IncidentResourceSummaryCar
   }
 
   bool get _canLogResources =>
-      widget.currentUser.role == UserRole.coordinator ||
-      widget.currentUser.role == UserRole.responder;
+      widget.canLogResources ??
+      (widget.currentUser.role == UserRole.coordinator ||
+          widget.currentUser.role == UserRole.responder);
 
   void _openLogSheet() {
     LogResourceBottomSheet.show(

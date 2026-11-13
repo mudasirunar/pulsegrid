@@ -122,4 +122,40 @@ class PhotoFileResolver {
       return null;
     }
   }
+
+  /// Deletes managed local photo files in `incident_photos/` from [candidatePaths]
+  /// that are no longer referenced in [stillReferencedPaths].
+  /// Never deletes files outside the app's managed `incident_photos/` directory.
+  static Future<void> deleteUnreferencedPhotos({
+    required Iterable<String> candidatePaths,
+    required Iterable<String> stillReferencedPaths,
+  }) async {
+    try {
+      final candidates = candidatePaths.toList();
+      if (candidates.isEmpty) return;
+
+      final docsDir = await getDocsDir();
+      final managedPrefix = '${docsDir.path}/incident_photos/';
+
+      final referencedResolved = <String>{};
+      for (final ref in stillReferencedPaths) {
+        final resolved = resolveLocalFile(ref);
+        if (resolved != null) {
+          referencedResolved.add(resolved.path);
+        } else {
+          referencedResolved.add(ref.trim());
+        }
+      }
+
+      for (final candidate in candidates) {
+        final file = resolveLocalFile(candidate);
+        if (file == null) continue;
+        if (!file.path.startsWith(managedPrefix)) continue;
+        if (referencedResolved.contains(file.path)) continue;
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
+    } catch (_) {}
+  }
 }

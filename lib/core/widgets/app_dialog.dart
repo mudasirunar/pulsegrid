@@ -15,9 +15,12 @@ class AppDialog extends StatelessWidget {
   final Color? iconBackgroundColor;
   final String? confirmText;
   final VoidCallback? onConfirm;
+  final VoidCallback? onConfirmPressed;
+  final bool isConfirmLoading;
   final String? cancelText;
   final VoidCallback? onCancel;
   final bool isDestructive;
+  final bool barrierDismissible;
   final List<Widget>? customActions;
 
   const AppDialog({
@@ -30,9 +33,12 @@ class AppDialog extends StatelessWidget {
     this.iconBackgroundColor,
     this.confirmText = 'Confirm',
     this.onConfirm,
+    this.onConfirmPressed,
+    this.isConfirmLoading = false,
     this.cancelText = 'Cancel',
     this.onCancel,
     this.isDestructive = false,
+    this.barrierDismissible = true,
     this.customActions,
   });
 
@@ -47,6 +53,7 @@ class AppDialog extends StatelessWidget {
     Color? iconBackgroundColor,
     String? confirmText = 'Confirm',
     VoidCallback? onConfirm,
+    Future<void> Function()? onAsyncConfirm,
     String? cancelText = 'Cancel',
     VoidCallback? onCancel,
     bool isDestructive = false,
@@ -60,19 +67,58 @@ class AppDialog extends StatelessWidget {
       barrierColor: Colors.black.withValues(alpha: 0.65),
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return AppDialog(
-          title: title,
-          message: message,
-          content: content,
-          icon: icon,
-          iconColor: iconColor,
-          iconBackgroundColor: iconBackgroundColor,
-          confirmText: confirmText,
-          onConfirm: onConfirm,
-          cancelText: cancelText,
-          onCancel: onCancel,
-          isDestructive: isDestructive,
-          customActions: customActions,
+        if (onAsyncConfirm == null) {
+          return AppDialog(
+            title: title,
+            message: message,
+            content: content,
+            icon: icon,
+            iconColor: iconColor,
+            iconBackgroundColor: iconBackgroundColor,
+            confirmText: confirmText,
+            onConfirm: onConfirm,
+            cancelText: cancelText,
+            onCancel: onCancel,
+            isDestructive: isDestructive,
+            barrierDismissible: barrierDismissible,
+            customActions: customActions,
+          );
+        }
+
+        bool isLoading = false;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AppDialog(
+              title: title,
+              message: message,
+              content: content,
+              icon: icon,
+              iconColor: iconColor,
+              iconBackgroundColor: iconBackgroundColor,
+              confirmText: confirmText,
+              isConfirmLoading: isLoading,
+              onConfirmPressed: isLoading
+                  ? null
+                  : () async {
+                      setDialogState(() => isLoading = true);
+                      try {
+                        await onAsyncConfirm();
+                        if (ctx.mounted) {
+                          Navigator.of(ctx).pop();
+                        }
+                      } catch (_) {
+                        if (ctx.mounted) {
+                          setDialogState(() => isLoading = false);
+                        }
+                      }
+                    },
+              cancelText: cancelText,
+              onCancel: onCancel,
+              isDestructive: isDestructive,
+              barrierDismissible: barrierDismissible && !isLoading,
+              customActions: customActions,
+            );
+          },
         );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
@@ -119,7 +165,9 @@ class AppDialog extends StatelessWidget {
         ? Colors.white
         : (isDark ? AppColors.backgroundDark : Colors.white);
 
-    return Dialog(
+    return PopScope(
+      canPop: barrierDismissible && !isConfirmLoading,
+      child: Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
@@ -237,10 +285,12 @@ class AppDialog extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                             ),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              onCancel?.call();
-                            },
+                            onPressed: isConfirmLoading
+                                ? null
+                                : () {
+                                    Navigator.of(context).pop();
+                                    onCancel?.call();
+                                  },
                             child: Text(
                               cancelText!,
                               style: const TextStyle(
@@ -266,17 +316,31 @@ class AppDialog extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                             ),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              onConfirm?.call();
-                            },
-                            child: Text(
-                              confirmText!,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                            onPressed: isConfirmLoading
+                                ? null
+                                : (onConfirmPressed ??
+                                    () {
+                                      Navigator.of(context).pop();
+                                      onConfirm?.call();
+                                    }),
+                            child: isConfirmLoading
+                                ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        confirmFg,
+                                      ),
+                                    ),
+                                  )
+                                : Text(
+                                    confirmText!,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                           ),
                         ),
                     ],
@@ -285,6 +349,7 @@ class AppDialog extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

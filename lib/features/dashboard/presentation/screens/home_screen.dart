@@ -130,6 +130,8 @@ class HomeScreen extends StatelessWidget {
                   incidents = state.incidents;
                 } else if (state is IncidentOperationSuccess) {
                   incidents = state.incidents;
+                } else if (state is IncidentDeletedSuccess) {
+                  incidents = state.incidents;
                 } else if (state is IncidentOperating) {
                   incidents = state.incidents;
                 }

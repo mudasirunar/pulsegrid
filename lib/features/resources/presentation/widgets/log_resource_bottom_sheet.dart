@@ -1,10 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/database/database_constants.dart';
+import '../../../../core/database/local_data_source.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_snackbar.dart';
+import '../../../../injection_container.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/domain/entities/user_role.dart';
+import '../../../sync/domain/services/sync_engine.dart';
 import '../../domain/entities/resource_log_entity.dart';
 import '../cubit/resource_cubit.dart';
 
@@ -58,19 +65,61 @@ class _LogResourceBottomSheetState extends State<LogResourceBottomSheet> {
   late String _selectedType;
   late String _selectedUnit;
   bool _isSubmitting = false;
+  bool _isReassignedAway = false;
 
   String? _quantityError;
   String? _customResourceError;
+
+  StreamSubscription<String>? _tableSubscription;
+  StreamSubscription<String>? _remoteDeleteSubscription;
 
   @override
   void initState() {
     super.initState();
     _selectedType = ResourceLogEntity.standardTypes.first;
     _selectedUnit = ResourceLogEntity.defaultUnits[_selectedType] ?? 'Units';
+    _subscribeToLiveChanges();
+  }
+
+  void _subscribeToLiveChanges() {
+    if (sl.isRegistered<LocalDataSource>()) {
+      _tableSubscription = sl<LocalDataSource>().onTableChanged.listen((table) {
+        if (table == DatabaseConstants.tableAssignments) {
+          _checkAssignmentAccess();
+        }
+      });
+    }
+    if (sl.isRegistered<SyncEngine>()) {
+      _remoteDeleteSubscription =
+          sl<SyncEngine>().onIncidentDeletedRemote.listen((deletedId) {
+        if (!mounted) return;
+        if (deletedId == widget.incidentId) {
+          FocusScope.of(context).unfocus();
+          Navigator.of(context).pop();
+        }
+      });
+    }
+  }
+
+  Future<void> _checkAssignmentAccess() async {
+    if (widget.currentUser.role != UserRole.responder ||
+        !sl.isRegistered<LocalDataSource>()) {
+      return;
+    }
+    final assignment = await sl<LocalDataSource>()
+        .getAssignmentByIncidentId(widget.incidentId);
+    if (!mounted) return;
+    if (assignment != null &&
+        assignment.responderId != widget.currentUser.id) {
+      FocusScope.of(context).unfocus();
+      setState(() => _isReassignedAway = true);
+    }
   }
 
   @override
   void dispose() {
+    _tableSubscription?.cancel();
+    _remoteDeleteSubscription?.cancel();
     _quantityController.dispose();
     _customResourceController.dispose();
     _notesController.dispose();
@@ -174,6 +223,66 @@ class _LogResourceBottomSheetState extends State<LogResourceBottomSheet> {
 
     if (widget.currentUser.role == UserRole.viewer) {
       return const SizedBox.shrink();
+    }
+
+    if (_isReassignedAway) {
+      return Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.statusInProgress.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.swap_horiz_rounded,
+                color: AppColors.statusInProgress,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Incident Reassigned',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This incident has been reassigned to another responder. You can no longer log resources for it.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            AppButton(
+              text: 'Close',
+              borderRadius: 12,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      );
     }
 
     return Container(

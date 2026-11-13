@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pulsegrid/core/theme/theme_cubit.dart';
 import 'package:pulsegrid/features/auth/data/repositories/auth_repository_impl.dart';
+import 'package:pulsegrid/features/auth/domain/entities/user_entity.dart';
 import 'package:pulsegrid/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:pulsegrid/features/auth/presentation/bloc/auth_state.dart';
 import 'package:pulsegrid/features/incidents/domain/entities/activity_event_entity.dart';
@@ -36,6 +37,18 @@ class _FakeIncidentRepository implements IncidentRepository {
   }) async => [];
 
   @override
+  Future<IncidentEntity> updateIncident({
+    required IncidentEntity updatedIncident,
+    required actor,
+  }) async => updatedIncident;
+
+  @override
+  Future<void> deleteIncident({
+    required String incidentId,
+    required actor,
+  }) async {}
+
+  @override
   Future<IncidentEntity> updateIncidentStatus({
     required String incidentId,
     required IncidentStatus targetStatus,
@@ -43,6 +56,21 @@ class _FakeIncidentRepository implements IncidentRepository {
   }) async {
     throw UnimplementedError();
   }
+
+  @override
+  Future<IncidentEntity> assignResponder({
+    required String incidentId,
+    required responder,
+    required actor,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<UserEntity>> getResponders({bool forceRefresh = false}) async => const [];
+
+  @override
+  Future<Map<String, int>> getResponderActiveCounts() async => const {};
 }
 
 void main() {

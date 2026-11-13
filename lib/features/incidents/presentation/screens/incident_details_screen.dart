@@ -5,28 +5,35 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/database/database_constants.dart';
 import '../../../../core/database/local_data_source.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_dialog.dart';
+import '../../../../core/widgets/app_overflow_menu.dart';
 import '../../../../core/widgets/app_snackbar.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../auth/domain/entities/user_entity.dart';
+import '../../../auth/domain/entities/user_role.dart';
 import '../../../resources/domain/entities/resource_log_entity.dart';
 import '../../../resources/domain/entities/resource_summary_item.dart';
 import '../../../resources/domain/repositories/resource_repository.dart';
 import '../../../resources/presentation/cubit/resource_cubit.dart';
 import '../../../resources/presentation/widgets/incident_resource_summary_card.dart';
 import '../../../sync/domain/services/sync_engine.dart';
+import '../../data/models/assignment_model.dart';
 import '../../domain/entities/activity_event_entity.dart';
 import '../../domain/entities/incident_entity.dart';
 import '../../domain/entities/incident_severity.dart';
 import '../../domain/entities/incident_status.dart';
+import '../../domain/logic/incident_permissions.dart';
 import '../bloc/incident_bloc.dart';
 import '../bloc/incident_event.dart';
 import '../bloc/incident_state.dart';
+import 'create_incident_screen.dart';
 import '../widgets/incident_details_skeleton.dart';
 import '../widgets/incident_lifecycle_stepper.dart';
 import '../widgets/incident_location_display.dart';
 import '../widgets/incident_photo_preview.dart';
 import '../widgets/incident_status_actions.dart';
 import '../widgets/incident_timeline_view.dart';
+import '../widgets/responder_picker_bottom_sheet.dart';
 
 class IncidentDetailsScreen extends StatefulWidget {
   final IncidentEntity? incident;
@@ -78,6 +85,8 @@ class _FallbackResourceRepository implements ResourceRepository {
 
 class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
   IncidentEntity? _incident;
+  AssignmentModel? _assignment;
+  Map<String, String> _responderNames = const {};
   bool _isLoadingIncident = false;
   List<ActivityEventEntity> _timeline = [];
   bool _isLoadingTimeline = true;
@@ -85,6 +94,12 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
   bool _ownsCubit = false;
   ScopedIncidentSubscription? _scopedSyncSubscription;
   StreamSubscription<String>? _tableSubscription;
+  StreamSubscription<String>? _remoteDeleteSubscription;
+  bool _hasShownRemoteDeleteDialog = false;
+  bool _isDeletingSelf = false;
+
+  final AppOverflowMenuController _overflowMenuController =
+      AppOverflowMenuController();
 
   @override
   void initState() {
@@ -114,9 +129,21 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
       _fetchIncidentById(widget.incidentId!);
     }
 
+    if (incId != null && di.sl.isRegistered<LocalDataSource>()) {
+      _loadAssignment(incId);
+    }
+    _loadResponderNames();
+
     // Scoped live WebSocket listener: mirrors remote resource logs & events into SQLite
     if (incId != null && di.sl.isRegistered<SyncEngine>()) {
-      _scopedSyncSubscription = di.sl<SyncEngine>().watchIncidentDetails(incId);
+      final syncEngine = di.sl<SyncEngine>();
+      _scopedSyncSubscription = syncEngine.watchIncidentDetails(incId);
+      _remoteDeleteSubscription = syncEngine.onIncidentDeletedRemote.listen((deletedId) {
+        if (!mounted || _isDeletingSelf || _hasShownRemoteDeleteDialog) return;
+        if (deletedId == incId) {
+          _showRemoteDeletedDialog();
+        }
+      });
     }
 
     // Local reactive listener: re-renders timeline or incident quietly on SQLite updates
@@ -127,13 +154,178 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
           _fetchTimelineQuietly();
         } else if (table == DatabaseConstants.tableIncidents && incId != null) {
           _refreshIncidentQuietly(incId);
+        } else if (table == DatabaseConstants.tableAssignments && incId != null) {
+          _loadAssignment(incId);
         }
       });
     }
   }
 
+  Future<void> _loadAssignment(String incidentId) async {
+    try {
+      final assignment =
+          await di.sl<LocalDataSource>().getAssignmentByIncidentId(incidentId);
+      if (mounted && assignment != _assignment) {
+        setState(() => _assignment = assignment);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadResponderNames() async {
+    try {
+      final repo = context.read<IncidentBloc>().incidentRepository;
+      final responders = await repo.getResponders();
+      if (!mounted) return;
+      setState(() {
+        _responderNames = {
+          for (final r in responders) r.id: r.displayName,
+        };
+      });
+    } catch (_) {}
+  }
+
+  void _openResponderPicker(IncidentEntity currentIncident) {
+    final repo = context.read<IncidentBloc>().incidentRepository;
+    ResponderPickerBottomSheet.show(
+      context,
+      incidentId: currentIncident.id,
+      currentUser: widget.currentUser,
+      currentResponderId: _assignment?.responderId,
+      repository: repo,
+      onAssigned: () {
+        if (di.sl.isRegistered<LocalDataSource>()) {
+          _loadAssignment(currentIncident.id);
+        }
+        _fetchTimelineQuietly();
+      },
+    );
+  }
+
+  String? _resolveAssignedResponderName() {
+    final assignment = _assignment;
+    if (assignment == null) return null;
+    final known = _responderNames[assignment.responderId];
+    if (known != null && known.trim().isNotEmpty) return known;
+
+    for (final event in _timeline) {
+      if (event.eventType == ActivityEventType.assignmentChange &&
+          event.newValue != null &&
+          event.newValue!.trim().isNotEmpty) {
+        return event.newValue!.trim();
+      }
+    }
+
+    if (assignment.responderId == widget.currentUser.id &&
+        widget.currentUser.displayName.trim().isNotEmpty) {
+      return widget.currentUser.displayName;
+    }
+    return 'Responder';
+  }
+
+  void _showRemoteDeletedDialog() {
+    if (_hasShownRemoteDeleteDialog || !mounted) return;
+    _hasShownRemoteDeleteDialog = true;
+    _overflowMenuController.closeImmediate();
+    AppDialog.show<void>(
+      context: context,
+      title: 'Incident Deleted',
+      message:
+          'This incident was deleted by another user or device and is no longer available.',
+      icon: Icons.delete_forever_outlined,
+      isDestructive: true,
+      barrierDismissible: false,
+      cancelText: null,
+      confirmText: 'Go Back',
+      onConfirm: () {
+        if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      },
+    );
+  }
+
+  Future<void> _onEditPressed() async {
+    final currentIncident = _incident;
+    if (currentIncident == null) return;
+    final bloc = context.read<IncidentBloc>();
+    final result = await Navigator.of(context).push<IncidentEntity?>(
+      MaterialPageRoute(
+        builder: (_) => BlocProvider.value(
+          value: bloc,
+          child: CreateIncidentScreen(
+            currentUser: widget.currentUser,
+            existingIncident: currentIncident,
+          ),
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() => _incident = result);
+      _fetchTimeline();
+    }
+  }
+
+  void _onDeletePressed() {
+    final currentIncident = _incident;
+    if (currentIncident == null) return;
+    final bloc = context.read<IncidentBloc>();
+    bool didDeleteSucceed = false;
+    String? errorMsg;
+
+    AppDialog.show<void>(
+      context: context,
+      title: 'Delete Incident',
+      message:
+          'Are you sure you want to permanently delete "${currentIncident.title}"? This action cannot be undone.',
+      icon: Icons.delete_outline_rounded,
+      isDestructive: true,
+      confirmText: 'Delete',
+      onAsyncConfirm: () async {
+        _isDeletingSelf = true;
+        if (di.sl.isRegistered<SyncEngine>()) {
+          di.sl<SyncEngine>().markSelfDeleting(currentIncident.id);
+        }
+
+        final futureResult = bloc.stream.firstWhere(
+          (s) => s is IncidentDeletedSuccess || s is IncidentOperationFailure,
+        );
+        bloc.add(
+          DeleteIncidentEvent(
+            incidentId: currentIncident.id,
+            actor: widget.currentUser,
+          ),
+        );
+
+        final resState = await futureResult;
+        if (resState is IncidentDeletedSuccess) {
+          didDeleteSucceed = true;
+          if (di.sl.isRegistered<SyncEngine>()) {
+            di.sl<SyncEngine>().triggerPush();
+          }
+        } else if (resState is IncidentOperationFailure) {
+          _isDeletingSelf = false;
+          errorMsg = resState.message;
+        }
+      },
+    ).then((_) {
+      if (!mounted) return;
+      if (didDeleteSucceed) {
+        AppSnackBar.showSuccess(
+          context,
+          'Incident deleted',
+          title: 'Deleted',
+        );
+        Navigator.of(context).pop();
+      } else if (errorMsg != null) {
+        AppSnackBar.showError(context, errorMsg!);
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _overflowMenuController.closeImmediate();
+    _remoteDeleteSubscription?.cancel();
     _scopedSyncSubscription?.cancel();
     _tableSubscription?.cancel();
     if (_ownsCubit) {
@@ -242,6 +434,10 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
   void _onTransitionStatus(IncidentStatus targetStatus) {
     final currentIncident = _incident;
     if (currentIncident == null) return;
+    if (targetStatus == IncidentStatus.assigned) {
+      _openResponderPicker(currentIncident);
+      return;
+    }
     context.read<IncidentBloc>().add(
           UpdateIncidentStatusEvent(
             incidentId: currentIncident.id,
@@ -268,10 +464,32 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
     }
 
     final currentIncident = _incident!;
+    final canModify = IncidentPermissions.canEditOrDelete(
+      incident: currentIncident,
+      user: widget.currentUser,
+      assignment: _assignment,
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Incident Details'),
+        actions: [
+          if (canModify)
+            AppOverflowMenu(
+              controller: _overflowMenuController,
+              items: [
+                AppOverflowMenuItem(
+                  label: 'Edit',
+                  onTap: _onEditPressed,
+                ),
+                AppOverflowMenuItem(
+                  label: 'Delete',
+                  isDestructive: true,
+                  onTap: _onDeletePressed,
+                ),
+              ],
+            ),
+        ],
       ),
       body: BlocProvider.value(
         value: _resourceCubit,
@@ -556,18 +774,70 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                 const SizedBox(height: 18),
 
                 // 7. Status Transition Actions
-                IncidentStatusActions(
-                  status: currentIncident.status,
-                  currentUser: widget.currentUser,
-                  isOperating: isOperating,
-                  onTransition: _onTransitionStatus,
-                ),
-                const SizedBox(height: 24),
+                if (IncidentPermissions.canActOnIncident(
+                  incident: currentIncident,
+                  user: widget.currentUser,
+                  assignment: _assignment,
+                )) ...[
+                  IncidentStatusActions(
+                    status: currentIncident.status,
+                    currentUser: widget.currentUser,
+                    isOperating: isOperating,
+                    onTransition: _onTransitionStatus,
+                  ),
+                  if (_assignment != null) const SizedBox(height: 12),
+                ],
+                if (_assignment != null) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Assigned to ${_resolveAssignedResponderName() ?? 'Responder'}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? AppColors.textPrimaryDark
+                                : AppColors.textPrimaryLight,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (widget.currentUser.role == UserRole.coordinator)
+                        TextButton(
+                          onPressed: isOperating
+                              ? null
+                              : () => _openResponderPicker(currentIncident),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text(
+                            'Change',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                ] else
+                  const SizedBox(height: 24),
 
                 // 8. Allocated Emergency Resources
                 IncidentResourceSummaryCard(
                   incidentId: currentIncident.id,
                   currentUser: widget.currentUser,
+                  canLogResources: IncidentPermissions.canActOnIncident(
+                    incident: currentIncident,
+                    user: widget.currentUser,
+                    assignment: _assignment,
+                  ),
                   onResourceLogged: _fetchTimeline,
                 ),
                 const SizedBox(height: 24),

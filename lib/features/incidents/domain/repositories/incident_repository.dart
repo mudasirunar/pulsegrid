@@ -23,6 +23,26 @@ abstract class IncidentRepository {
     required UserEntity actor,
   });
 
+  Future<IncidentEntity> updateIncident({
+    required IncidentEntity updatedIncident,
+    required UserEntity actor,
+  });
+
+  Future<void> deleteIncident({
+    required String incidentId,
+    required UserEntity actor,
+  });
+
+  Future<IncidentEntity> assignResponder({
+    required String incidentId,
+    required UserEntity responder,
+    required UserEntity actor,
+  });
+
+  Future<List<UserEntity>> getResponders({bool forceRefresh = false});
+
+  Future<Map<String, int>> getResponderActiveCounts();
+
   Future<List<ActivityEventEntity>> getActivityTimeline(String incidentId);
 }
 

@@ -67,6 +67,21 @@ class IncidentOperationSuccess extends IncidentState {
   List<Object?> get props => [message, incidents, incident];
 }
 
+class IncidentDeletedSuccess extends IncidentState {
+  final String incidentId;
+  final String message;
+  final List<IncidentEntity> incidents;
+
+  const IncidentDeletedSuccess({
+    required this.incidentId,
+    required this.message,
+    this.incidents = const [],
+  });
+
+  @override
+  List<Object?> get props => [incidentId, message, incidents];
+}
+
 class IncidentOperationFailure extends IncidentState {
   final String message;
 

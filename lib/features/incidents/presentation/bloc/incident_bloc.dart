@@ -25,6 +25,9 @@ class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
     on<LoadIncidentsEvent>(_onLoadIncidents);
     on<CreateIncidentEvent>(_onCreateIncident);
     on<UpdateIncidentStatusEvent>(_onUpdateIncidentStatus);
+    on<UpdateIncidentEvent>(_onUpdateIncident);
+    on<DeleteIncidentEvent>(_onDeleteIncident);
+    on<AssignResponderEvent>(_onAssignResponder);
 
     _incidentsSubscription = incidentRepository.onIncidentsChanged.listen((_) {
       if (state is! IncidentCreating && state is! IncidentOperating) {
@@ -69,7 +72,7 @@ class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
   ) async {
     emit(const IncidentCreating());
     try {
-      final now = DateTime.now();
+      final now = DateTime.now().toUtc();
       final incident = IncidentEntity(
         id: 'inc-${_uuid.v4().substring(0, 8)}',
         title: event.title.trim(),
@@ -128,6 +131,101 @@ class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
       );
       emit(IncidentOperationSuccess(
         message: 'Status updated to ${event.targetStatus.displayName}',
+        incidents: refreshed,
+        incident: updated,
+      ));
+    } catch (e) {
+      emit(IncidentOperationFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(IncidentLoaded(currentList));
+    }
+  }
+
+  List<IncidentEntity> _extractCurrentList() {
+    final s = state;
+    if (s is IncidentLoaded) return s.incidents;
+    if (s is IncidentCreatedSuccess) return s.incidents;
+    if (s is IncidentOperationSuccess) return s.incidents;
+    if (s is IncidentDeletedSuccess) return s.incidents;
+    if (s is IncidentOperating) return s.incidents;
+    return <IncidentEntity>[];
+  }
+
+  Future<void> _onUpdateIncident(
+    UpdateIncidentEvent event,
+    Emitter<IncidentState> emit,
+  ) async {
+    final currentList = _extractCurrentList();
+    emit(IncidentOperating(currentList));
+    try {
+      final updated = await incidentRepository.updateIncident(
+        updatedIncident: event.updatedIncident,
+        actor: event.actor,
+      );
+      final refreshed = await incidentRepository.getIncidents(
+        statusFilter: _lastStatusFilter,
+        severityFilter: _lastSeverityFilter,
+        searchQuery: _lastSearchQuery,
+      );
+      emit(IncidentOperationSuccess(
+        message: 'Incident updated successfully',
+        incidents: refreshed,
+        incident: updated,
+      ));
+    } catch (e) {
+      emit(IncidentOperationFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(IncidentLoaded(currentList));
+    }
+  }
+
+  Future<void> _onDeleteIncident(
+    DeleteIncidentEvent event,
+    Emitter<IncidentState> emit,
+  ) async {
+    final currentList = _extractCurrentList();
+    emit(IncidentOperating(currentList));
+    try {
+      await incidentRepository.deleteIncident(
+        incidentId: event.incidentId,
+        actor: event.actor,
+      );
+      final refreshed = await incidentRepository.getIncidents(
+        statusFilter: _lastStatusFilter,
+        severityFilter: _lastSeverityFilter,
+        searchQuery: _lastSearchQuery,
+      );
+      emit(IncidentDeletedSuccess(
+        incidentId: event.incidentId,
+        message: 'Incident deleted',
+        incidents: refreshed,
+      ));
+    } catch (e) {
+      emit(IncidentOperationFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(IncidentLoaded(currentList));
+    }
+  }
+
+  Future<void> _onAssignResponder(
+    AssignResponderEvent event,
+    Emitter<IncidentState> emit,
+  ) async {
+    final currentList = _extractCurrentList();
+    emit(IncidentOperating(currentList));
+    try {
+      final updated = await incidentRepository.assignResponder(
+        incidentId: event.incidentId,
+        responder: event.responder,
+        actor: event.actor,
+      );
+      final refreshed = await incidentRepository.getIncidents(
+        statusFilter: _lastStatusFilter,
+        severityFilter: _lastSeverityFilter,
+        searchQuery: _lastSearchQuery,
+      );
+      final responderName = event.responder.displayName.trim().isNotEmpty
+          ? event.responder.displayName.trim()
+          : event.responder.email;
+      emit(IncidentOperationSuccess(
+        message: 'Assigned to $responderName',
         incidents: refreshed,
         incident: updated,
       ));
