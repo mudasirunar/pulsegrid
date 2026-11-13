@@ -15,7 +15,7 @@ enum DashboardStatusFilter {
   const DashboardStatusFilter(this.label);
 }
 
-enum DashboardAssignmentFilter { all, assignedToMe, unassigned }
+enum DashboardAssignmentFilter { all, assignedToMe, assigned, unassigned }
 
 enum DashboardSort { recent, severity }
 
@@ -104,6 +104,8 @@ class DashboardFilterState {
           break;
         case DashboardAssignmentFilter.assignedToMe:
           if (assigneeId != currentUserId) return false;
+        case DashboardAssignmentFilter.assigned:
+          if (assigneeId == null || assigneeId.isEmpty) return false;
         case DashboardAssignmentFilter.unassigned:
           if (assigneeId != null && assigneeId.isNotEmpty) return false;
       }

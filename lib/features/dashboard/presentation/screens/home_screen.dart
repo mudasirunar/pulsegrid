@@ -116,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final updated = await showDashboardFilterSheet(
       context: context,
       initialState: _filterState,
-      isReadOnly: widget.user.role.isReadOnly,
+      userRole: widget.user.role,
     );
     if (updated != null && mounted) {
       setState(() => _filterState = updated);
@@ -163,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           incidents: allIncidents,
                           incidentAssignees: _incidentAssignees,
                           currentUserId: widget.user.id,
-                          isReadOnly: widget.user.role.isReadOnly,
+                          userRole: widget.user.role,
                           syncState: syncState,
                           filterState: _filterState,
                           onFilterChanged: (updated) =>

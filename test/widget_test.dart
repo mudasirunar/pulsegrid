@@ -149,7 +149,7 @@ void main() {
 
     // Verify HomeScreen renders with coordinator dashboard metrics and + CTA
     expect(find.text('Pulse Grid'), findsOneWidget);
-    expect(find.text('Assigned to Me'), findsOneWidget);
+    expect(find.text('Unassigned'), findsOneWidget);
     expect(find.text('Pending Sync'), findsOneWidget);
     expect(find.byIcon(Icons.add_rounded), findsOneWidget);
 

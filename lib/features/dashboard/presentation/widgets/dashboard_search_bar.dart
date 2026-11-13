@@ -208,11 +208,14 @@ class _ActiveFilterChipsRow extends StatelessWidget {
       ));
     }
     if (filterState.assignmentFilter != DashboardAssignmentFilter.all) {
+      final label = switch (filterState.assignmentFilter) {
+        DashboardAssignmentFilter.assignedToMe => 'Assigned to Me',
+        DashboardAssignmentFilter.assigned => 'Assigned',
+        DashboardAssignmentFilter.unassigned => 'Unassigned',
+        DashboardAssignmentFilter.all => 'All',
+      };
       chips.add(_RemovableFilterChip(
-        label: filterState.assignmentFilter ==
-                DashboardAssignmentFilter.assignedToMe
-            ? 'Assigned to Me'
-            : 'Unassigned',
+        label: label,
         isDark: isDark,
         borderColor: borderColor,
         onRemove: () => onFilterChanged(

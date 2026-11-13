@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../auth/domain/entities/user_role.dart';
 import '../../../incidents/domain/entities/incident_severity.dart';
 import 'dashboard_filter_state.dart';
 
@@ -9,7 +10,7 @@ import 'dashboard_filter_state.dart';
 Future<DashboardFilterState?> showDashboardFilterSheet({
   required BuildContext context,
   required DashboardFilterState initialState,
-  required bool isReadOnly,
+  required UserRole userRole,
 }) {
   var tempStatus = initialState.statusFilter;
   var tempSeverity = initialState.severityFilter;
@@ -129,7 +130,7 @@ Future<DashboardFilterState?> showDashboardFilterSheet({
                       );
                     }).toList(),
                   ),
-                  if (!isReadOnly) ...[
+                  if (!userRole.isReadOnly) ...[
                     const SizedBox(height: 16),
                     _SheetSectionLabel(
                       label: 'ASSIGNMENT',
@@ -148,15 +149,26 @@ Future<DashboardFilterState?> showDashboardFilterSheet({
                                 tempAssignment = DashboardAssignmentFilter.all,
                           ),
                         ),
-                        ChoiceChip(
-                          label: const Text('Assigned to Me'),
-                          selected: tempAssignment ==
-                              DashboardAssignmentFilter.assignedToMe,
-                          onSelected: (_) => setSheetState(
-                            () => tempAssignment =
+                        if (userRole == UserRole.coordinator)
+                          ChoiceChip(
+                            label: const Text('Assigned'),
+                            selected: tempAssignment ==
+                                DashboardAssignmentFilter.assigned,
+                            onSelected: (_) => setSheetState(
+                              () => tempAssignment =
+                                  DashboardAssignmentFilter.assigned,
+                            ),
+                          )
+                        else
+                          ChoiceChip(
+                            label: const Text('Assigned to Me'),
+                            selected: tempAssignment ==
                                 DashboardAssignmentFilter.assignedToMe,
+                            onSelected: (_) => setSheetState(
+                              () => tempAssignment =
+                                  DashboardAssignmentFilter.assignedToMe,
+                            ),
                           ),
-                        ),
                         ChoiceChip(
                           label: const Text('Unassigned'),
                           selected: tempAssignment ==
