@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_badge.dart';
+import '../../../sync/domain/entities/sync_operation_entity.dart';
 import '../../domain/entities/incident_entity.dart';
 import '../../domain/entities/incident_severity.dart';
 import '../../domain/entities/incident_status.dart';
@@ -9,11 +10,13 @@ import '../../domain/entities/incident_status.dart';
 class IncidentCard extends StatelessWidget {
   final IncidentEntity incident;
   final VoidCallback? onTap;
+  final SyncStatus? syncStatus;
 
   const IncidentCard({
     super.key,
     required this.incident,
     this.onTap,
+    this.syncStatus,
   });
 
   Color _severityColor(IncidentSeverity severity) {
@@ -126,6 +129,10 @@ class IncidentCard extends StatelessWidget {
                     const SizedBox(width: 10),
                   ],
                   const Spacer(),
+                  if (syncStatus != null && syncStatus != SyncStatus.synced) ...[
+                    _SyncIndicator(syncStatus: syncStatus!),
+                    const SizedBox(width: 10),
+                  ],
                   Text(
                     '${incident.createdAt.hour.toString().padLeft(2, '0')}:${incident.createdAt.minute.toString().padLeft(2, '0')}',
                     style: TextStyle(
@@ -139,6 +146,43 @@ class IncidentCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SyncIndicator extends StatelessWidget {
+  final SyncStatus syncStatus;
+
+  const _SyncIndicator({required this.syncStatus});
+
+  @override
+  Widget build(BuildContext context) {
+    final (Color color, String label) = switch (syncStatus) {
+      SyncStatus.pending => (AppColors.syncPending, 'Pending'),
+      SyncStatus.syncing => (AppColors.syncSyncing, 'Syncing'),
+      SyncStatus.failed => (AppColors.syncFailed, 'Failed'),
+      SyncStatus.conflict => (AppColors.syncFailed, 'Conflict'),
+      SyncStatus.synced => (AppColors.syncSynced, 'Synced'),
+    };
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -19,6 +19,23 @@ class MainShellScreen extends StatefulWidget {
 
 class _MainShellScreenState extends State<MainShellScreen> {
   int _currentIndex = 0;
+  final ScrollController _homeScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _homeScrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (_currentIndex == 0 && _homeScrollController.hasClients) {
+      _homeScrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 380),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +46,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
           IndexedStack(
             index: _currentIndex,
             children: [
-              HomeScreen(user: widget.user),
+              HomeScreen(
+                user: widget.user,
+                scrollController: _homeScrollController,
+              ),
               ProfileScreen(user: widget.user),
             ],
           ),
@@ -43,6 +63,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
               onTabSelected: (index) {
                 setState(() => _currentIndex = index);
               },
+              onTabReselected: _scrollToTop,
               onActionPressed: () {
                 Navigator.push(
                   context,

@@ -6,6 +6,7 @@ void main() {
   Widget buildSubject({
     int currentIndex = 0,
     required ValueChanged<int> onTabSelected,
+    VoidCallback? onTabReselected,
     VoidCallback? onActionPressed,
     bool showActionButton = true,
   }) {
@@ -17,6 +18,7 @@ void main() {
           child: FloatingIslandNavBar(
             currentIndex: currentIndex,
             onTabSelected: onTabSelected,
+            onTabReselected: onTabReselected,
             onActionPressed: onActionPressed,
             showActionButton: showActionButton,
           ),
@@ -100,6 +102,21 @@ void main() {
     expect(find.byIcon(Icons.add_rounded), findsNothing);
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Profile'), findsOneWidget);
+  });
+
+  testWidgets('retapping active tab invokes onTabReselected', (tester) async {
+    bool reselected = false;
+    await tester.pumpWidget(
+      buildSubject(
+        currentIndex: 0,
+        onTabSelected: (_) {},
+        onTabReselected: () => reselected = true,
+      ),
+    );
+
+    await tester.tap(find.text('Home'));
+    await tester.pumpAndSettle();
+    expect(reselected, isTrue);
   });
 }
 

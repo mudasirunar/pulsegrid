@@ -1,307 +1,223 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/theme_cubit.dart';
-import '../../../../core/widgets/app_button.dart';
+import '../../../../core/database/local_data_source.dart';
+import '../../../../injection_container.dart' as di;
 import '../../../auth/data/models/user_model.dart';
-import '../../../auth/presentation/bloc/auth_bloc.dart';
-import '../../../auth/presentation/bloc/auth_event.dart';
-import '../../../auth/presentation/widgets/role_guard.dart';
 import '../../../incidents/domain/entities/incident_entity.dart';
 import '../../../incidents/presentation/bloc/incident_bloc.dart';
+import '../../../incidents/presentation/bloc/incident_event.dart';
 import '../../../incidents/presentation/bloc/incident_state.dart';
-import '../../../incidents/presentation/screens/create_incident_screen.dart';
-import '../../../incidents/presentation/screens/incident_details_screen.dart';
-import '../../../incidents/presentation/widgets/incident_card.dart';
-import '../widgets/quick_role_switcher.dart';
-import '../widgets/role_capabilities_section.dart';
-import '../widgets/user_profile_header.dart';
+import '../../../sync/domain/entities/sync_operation_entity.dart';
+import '../../../sync/presentation/bloc/sync_bloc.dart';
+import '../../../sync/presentation/bloc/sync_state.dart';
+import '../widgets/dashboard_filter_sheet.dart';
+import '../widgets/dashboard_filter_state.dart';
+import '../widgets/dashboard_incident_list.dart';
+import '../widgets/dashboard_metrics_grid.dart';
+import '../widgets/dashboard_search_bar.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   final UserModel user;
+  final ScrollController? scrollController;
 
-  const HomeScreen({super.key, required this.user});
+  const HomeScreen({
+    super.key,
+    required this.user,
+    this.scrollController,
+  });
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  DashboardFilterState _filterState = const DashboardFilterState();
+  Map<String, String> _incidentAssignees = {};
+  Map<String, SyncStatus> _incidentSyncStates = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardMetadata();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadDashboardMetadata() async {
+    if (!di.sl.isRegistered<LocalDataSource>()) return;
+    try {
+      final local = di.sl<LocalDataSource>();
+      final assignments = await local.getAllAssignments();
+      final syncOps = await local.getAllSyncOperations();
+
+      final assignees = <String, String>{};
+      for (final a in assignments) {
+        assignees[a.incidentId] = a.responderId;
+      }
+
+      final syncMap = <String, SyncStatus>{};
+      for (final op in syncOps) {
+        if (op.entityType != 'INCIDENT') continue;
+        final status = SyncStatus.fromString(op.syncState);
+        if (status == SyncStatus.synced) continue;
+        final existing = syncMap[op.entityId];
+        if (existing == null ||
+            _syncPriority(status) > _syncPriority(existing)) {
+          syncMap[op.entityId] = status;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _incidentAssignees = assignees;
+          _incidentSyncStates = syncMap;
+        });
+      }
+    } catch (_) {
+      // Safe fallback when LocalDataSource is not initialized (e.g. widget tests)
+    }
+  }
+
+  int _syncPriority(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.failed:
+      case SyncStatus.conflict:
+        return 3;
+      case SyncStatus.syncing:
+        return 2;
+      case SyncStatus.pending:
+        return 1;
+      case SyncStatus.synced:
+        return 0;
+    }
+  }
+
+  List<IncidentEntity> _extractIncidents(IncidentState state) {
+    if (state is IncidentLoaded) return state.incidents;
+    if (state is IncidentCreatedSuccess) return state.incidents;
+    if (state is IncidentOperating) return state.incidents;
+    if (state is IncidentOperationSuccess) return state.incidents;
+    if (state is IncidentDeletedSuccess) return state.incidents;
+    return const [];
+  }
+
+  void _clearAllFilters() {
+    _searchController.clear();
+    setState(() => _filterState = _filterState.cleared());
+  }
+
+  Future<void> _openFilterSheet() async {
+    final updated = await showDashboardFilterSheet(
+      context: context,
+      initialState: _filterState,
+      isReadOnly: widget.user.role.isReadOnly,
+    );
+    if (updated != null && mounted) {
+      setState(() => _filterState = updated);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pulse Grid Field Ops'),
-        actions: [
-          IconButton(
-            tooltip: 'Toggle Theme',
-            icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-            onPressed: () {
-              context.read<ThemeCubit>().toggleTheme(MediaQuery.of(context).platformBrightness);
-            },
-          ),
-          IconButton(
-            tooltip: 'Sign Out',
-            icon: const Icon(Icons.logout_outlined),
-            onPressed: () {
-              context.read<AuthBloc>().add(const SignOutEvent());
-            },
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 108.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 1. User Session Profile Header (Extracted Reusable Component)
-            UserProfileHeader(user: user),
-
-            Divider(
-              height: 36,
-              thickness: 1,
-              color: isDark ? AppColors.borderDark : AppColors.borderLight,
-            ),
-
-            // 2. Active Incidents Section
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<IncidentBloc, IncidentState>(
+          listener: (_, _) => _loadDashboardMetadata(),
+        ),
+        BlocListener<SyncBloc, SyncState>(
+          listener: (_, _) => _loadDashboardMetadata(),
+        ),
+      ],
+      child: Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: SingleChildScrollView(
+            controller: widget.scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20.0, 14.0, 20.0, 108.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'ACTIVE INCIDENTS',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
-                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  'Pulse Grid',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.6,
                   ),
                 ),
-                if (!user.role.isReadOnly)
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CreateIncidentScreen(currentUser: user),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Report', style: TextStyle(fontWeight: FontWeight.w700)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            BlocBuilder<IncidentBloc, IncidentState>(
-              builder: (context, state) {
-                if (state is IncidentLoading) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24.0),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-
-                List<IncidentEntity> incidents = [];
-                if (state is IncidentLoaded) {
-                  incidents = state.incidents;
-                } else if (state is IncidentCreatedSuccess) {
-                  incidents = state.incidents;
-                } else if (state is IncidentOperationSuccess) {
-                  incidents = state.incidents;
-                } else if (state is IncidentDeletedSuccess) {
-                  incidents = state.incidents;
-                } else if (state is IncidentOperating) {
-                  incidents = state.incidents;
-                }
-
-                if (incidents.isEmpty) {
-                  return Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.surfaceDark : AppColors.borderLight.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.emergency_outlined,
-                          size: 36,
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'No Emergency Incidents Reported',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Tap "+ Report Incident" to log and dispatch field responders.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: incidents.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final inc = incidents[index];
-                    return IncidentCard(
-                      incident: inc,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => IncidentDetailsScreen(
-                              incident: inc,
-                              currentUser: user,
-                            ),
-                          ),
+                const SizedBox(height: 18),
+                BlocBuilder<IncidentBloc, IncidentState>(
+                  builder: (context, incidentState) {
+                    final allIncidents = _extractIncidents(incidentState);
+                    return BlocBuilder<SyncBloc, SyncState>(
+                      builder: (context, syncState) {
+                        return DashboardMetricsGrid(
+                          incidents: allIncidents,
+                          incidentAssignees: _incidentAssignees,
+                          currentUserId: widget.user.id,
+                          isReadOnly: widget.user.role.isReadOnly,
+                          syncState: syncState,
+                          filterState: _filterState,
+                          onFilterChanged: (updated) =>
+                              setState(() => _filterState = updated),
                         );
                       },
                     );
                   },
-                );
-              },
-            ),
-
-            Divider(
-              height: 36,
-              thickness: 1,
-              color: isDark ? AppColors.borderDark : AppColors.borderLight,
-            ),
-
-            // 3. Active Role Capabilities Section (Extracted Reusable Component)
-            RoleCapabilitiesSection(role: user.role),
-
-            Divider(
-              height: 36,
-              thickness: 1,
-              color: isDark ? AppColors.borderDark : AppColors.borderLight,
-            ),
-
-            // 4. Role Guard Action Section
-            Text(
-              'ROLE-BASED ACTION GUARDS',
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Buttons below demonstrate dynamic role guarding per specification:',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // Coordinator Only Action
-            RoleGuard.coordinatorOnly(
-              fallback: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.surfaceDark : AppColors.borderLight.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                    width: 1,
+                ),
+                const SizedBox(height: 18),
+                DashboardSearchBar(
+                  controller: _searchController,
+                  filterState: _filterState,
+                  onSearchChanged: (value) => setState(
+                    () => _filterState =
+                        _filterState.copyWith(searchQuery: value),
                   ),
+                  onClearSearch: () {
+                    _searchController.clear();
+                    setState(
+                      () => _filterState =
+                          _filterState.copyWith(searchQuery: ''),
+                    );
+                  },
+                  onOpenFilters: _openFilterSheet,
+                  onFilterChanged: (updated) =>
+                      setState(() => _filterState = updated),
+                  onClearAllFilters: _clearAllFilters,
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.lock_outline,
-                      size: 16,
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Coordinator Only: "Close Incident" action hidden for this role.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                        ),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 18),
+                BlocBuilder<IncidentBloc, IncidentState>(
+                  builder: (context, state) {
+                    final allIncidents = _extractIncidents(state);
+                    final visibleIncidents = _filterState.apply(
+                      allIncidents,
+                      incidentAssignees: _incidentAssignees,
+                      currentUserId: widget.user.id,
+                    );
+                    return DashboardIncidentList(
+                      incidentState: state,
+                      allIncidents: allIncidents,
+                      visibleIncidents: visibleIncidents,
+                      incidentSyncStates: _incidentSyncStates,
+                      user: widget.user,
+                      onRetryLoad: () => context
+                          .read<IncidentBloc>()
+                          .add(const LoadIncidentsEvent()),
+                      onClearFilters: _clearAllFilters,
+                    );
+                  },
                 ),
-              ),
-              child: AppButton(
-                text: 'Close Incident (Coordinator Permission)',
-                leadingIcon: Icons.check_circle_outline,
-                variant: AppButtonVariant.destructive,
-                onPressed: () {},
-              ),
+              ],
             ),
-            const SizedBox(height: 12),
-
-            // Responder & Coordinator Action (Mutations)
-            RoleGuard.mutations(
-              fallback: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.surfaceDark : AppColors.borderLight.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.lock_outline,
-                      size: 16,
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Viewers: All edit & resource logging actions disabled.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              child: AppButton(
-                text: 'Log Resources & Update Status',
-                leadingIcon: Icons.add_circle_outline,
-                variant: AppButtonVariant.primary,
-                onPressed: () {},
-              ),
-            ),
-            const SizedBox(height: 28),
-
-            // 5. Quick Role Switcher (Extracted Reusable Component)
-            const QuickRoleSwitcher(),
-            const SizedBox(height: 16),
-          ],
+          ),
         ),
       ),
     );

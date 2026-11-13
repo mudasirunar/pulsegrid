@@ -14,6 +14,8 @@ import 'package:pulsegrid/features/incidents/domain/entities/incident_status.dar
 import 'package:pulsegrid/features/incidents/domain/repositories/incident_repository.dart';
 import 'package:pulsegrid/features/incidents/presentation/bloc/incident_bloc.dart';
 import 'package:pulsegrid/features/incidents/presentation/bloc/incident_state.dart';
+import 'package:pulsegrid/features/sync/domain/services/sync_queue_manager.dart';
+import 'package:pulsegrid/features/sync/presentation/bloc/sync_bloc.dart';
 import 'package:pulsegrid/main.dart';
 
 class _FakeIncidentRepository implements IncidentRepository {
@@ -73,11 +75,17 @@ class _FakeIncidentRepository implements IncidentRepository {
   Future<Map<String, int>> getResponderActiveCounts() async => const {};
 }
 
+class _FakeSyncQueueManager extends Fake implements SyncQueueManager {
+  @override
+  Stream<SyncQueueMetrics> get metricsStream => const Stream.empty();
+}
+
 void main() {
   late SharedPreferences prefs;
   late AuthRepositoryImpl authRepository;
   late ThemeCubit themeCubit;
   late IncidentBloc incidentBloc;
+  late SyncBloc syncBloc;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -88,11 +96,13 @@ void main() {
       incidentRepository: _FakeIncidentRepository(),
       initialState: const IncidentLoaded([]),
     );
+    syncBloc = SyncBloc(syncQueueManager: _FakeSyncQueueManager());
   });
 
   tearDown(() {
     themeCubit.close();
     incidentBloc.close();
+    syncBloc.close();
   });
 
   Widget createWidgetUnderTest(AuthBloc authBloc) {
@@ -101,6 +111,7 @@ void main() {
         BlocProvider<ThemeCubit>.value(value: themeCubit),
         BlocProvider<AuthBloc>.value(value: authBloc),
         BlocProvider<IncidentBloc>.value(value: incidentBloc),
+        BlocProvider<SyncBloc>.value(value: syncBloc),
       ],
       child: const PulseGridApp(),
     );
@@ -136,15 +147,16 @@ void main() {
     await tester.pumpWidget(createWidgetUnderTest(authBloc));
     await tester.pump();
 
-    // Verify HomeScreen renders with coordinator role
-    expect(find.text('Pulse Grid Field Ops'), findsOneWidget);
-    expect(find.text('COORDINATOR'), findsOneWidget);
-    expect(find.text('Close Incident (Coordinator Permission)'), findsOneWidget);
+    // Verify HomeScreen renders with coordinator dashboard metrics and + CTA
+    expect(find.text('Pulse Grid'), findsOneWidget);
+    expect(find.text('Assigned to Me'), findsOneWidget);
+    expect(find.text('Pending Sync'), findsOneWidget);
+    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
 
     authBloc.close();
   });
 
-  testWidgets('Signing in as Viewer hides close and edit action buttons (Role Guarding)',
+  testWidgets('Signing in as Viewer hides + CTA and operational metrics (Role Guarding)',
       (WidgetTester tester) async {
     final authBloc = AuthBloc(
       authRepository: authRepository,
@@ -154,11 +166,12 @@ void main() {
     await tester.pumpWidget(createWidgetUnderTest(authBloc));
     await tester.pump();
 
-    expect(find.text('VIEWER'), findsOneWidget);
-    // RoleGuard should show restricted notice instead of action buttons
-    expect(find.text('Close Incident (Coordinator Permission)'), findsNothing);
-    expect(find.text('Log Resources & Update Status'), findsNothing);
-    expect(find.text('Viewers: All edit & resource logging actions disabled.'), findsOneWidget);
+    expect(find.text('Pulse Grid'), findsOneWidget);
+    expect(find.byIcon(Icons.add_rounded), findsNothing);
+    expect(find.text('Assigned to Me'), findsNothing);
+    expect(find.text('Pending Sync'), findsNothing);
+    expect(find.text('In Progress'), findsOneWidget);
+    expect(find.text('Resolved'), findsOneWidget);
 
     authBloc.close();
   });

@@ -14,6 +14,7 @@ import '../theme/app_colors.dart';
 class FloatingIslandNavBar extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onTabSelected;
+  final VoidCallback? onTabReselected;
   final VoidCallback? onActionPressed;
   final bool showActionButton;
 
@@ -21,6 +22,7 @@ class FloatingIslandNavBar extends StatefulWidget {
     super.key,
     required this.currentIndex,
     required this.onTabSelected,
+    this.onTabReselected,
     this.onActionPressed,
     this.showActionButton = true,
   });
@@ -88,6 +90,12 @@ class _FloatingIslandNavBarState extends State<FloatingIslandNavBar>
 
   void _handleTapUp(TapUpDetails details, double trackWidth) {
     final target = details.localPosition.dx < trackWidth * 0.5 ? 0 : 1;
+    if (target == widget.currentIndex) {
+      HapticFeedback.selectionClick();
+      widget.onTabReselected?.call();
+      _animateTo(target.toDouble());
+      return;
+    }
     _selectIndex(target);
   }
 
