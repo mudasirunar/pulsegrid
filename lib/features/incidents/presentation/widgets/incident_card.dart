@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/app_badge.dart';
 import '../../../sync/domain/entities/sync_operation_entity.dart';
 import '../../domain/entities/incident_entity.dart';
@@ -47,15 +48,6 @@ class IncidentCard extends StatelessWidget {
       case IncidentStatus.closed:
         return AppColors.statusClosed;
     }
-  }
-
-  String _formatTime12Hr(DateTime dt) {
-    final local = dt.toLocal();
-    final hour24 = local.hour;
-    final period = hour24 >= 12 ? 'PM' : 'AM';
-    final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$hour12:$minute $period';
   }
 
   @override
@@ -203,7 +195,7 @@ class IncidentCard extends StatelessWidget {
                     const SizedBox(width: 8),
                   ],
                   Text(
-                    _formatTime12Hr(incident.createdAt),
+                    DateTimeFormatter.time12Hour(incident.createdAt),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: secondaryText,
                     ),

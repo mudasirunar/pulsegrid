@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_time_formatter.dart';
 import '../../../auth/domain/entities/user_role.dart';
 import '../../../incidents/domain/entities/incident_entity.dart';
 import '../../../incidents/domain/entities/incident_severity.dart';
@@ -58,14 +59,6 @@ class DashboardMetricsGrid extends StatelessWidget {
             : target,
       ),
     );
-  }
-
-  String _formatRelativeTime(DateTime dt) {
-    final diff = DateTime.now().difference(dt.toLocal());
-    if (diff.inSeconds < 60) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
   }
 
   @override
@@ -245,7 +238,7 @@ class DashboardMetricsGrid extends StatelessWidget {
     } else {
       syncDotColor = AppColors.syncSynced;
       syncSubtitle = syncState.lastSyncedAt != null
-          ? 'Synced · ${_formatRelativeTime(syncState.lastSyncedAt!)}'
+          ? 'Synced · ${DateTimeFormatter.compactTimeAgo(syncState.lastSyncedAt!)}'
           : 'All synced';
     }
 

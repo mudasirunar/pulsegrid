@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_time_formatter.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/domain/entities/user_role.dart';
 import '../../../incidents/presentation/widgets/incident_details_skeleton.dart';
@@ -116,14 +117,6 @@ class _IncidentResourceSummaryCardState extends State<IncidentResourceSummaryCar
     }
   }
 
-  String _formatTimeAgo(DateTime dateTime) {
-    final diff = DateTime.now().difference(dateTime);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-
   Widget _buildLogRow(ResourceLogEntity log, ThemeData theme, bool isDark) {
     final qtyStr = log.quantity.truncateToDouble() == log.quantity
         ? log.quantity.toInt().toString()
@@ -165,7 +158,7 @@ class _IncidentResourceSummaryCardState extends State<IncidentResourceSummaryCar
         ),
         const SizedBox(width: 8),
         Text(
-          _formatTimeAgo(log.createdAt),
+          DateTimeFormatter.compactTimeAgo(log.createdAt),
           style: theme.textTheme.bodySmall?.copyWith(
             fontSize: 11,
             color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,

@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/database/database_constants.dart';
 import '../../../../core/database/local_data_source.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/app_dialog.dart';
 import '../../../../core/widgets/app_overflow_menu.dart';
 import '../../../../core/widgets/app_snackbar.dart';
@@ -672,7 +673,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Reported by ${_resolveReporterName(currentIncident.createdBy)} • ${_formatTimeAgo(currentIncident.createdAt)}',
+                        'Reported by ${_resolveReporterName(currentIncident.createdBy)} • ${DateTimeFormatter.timeAgo(currentIncident.createdAt)}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                         ),
@@ -693,7 +694,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      _formatDate(currentIncident.createdAt),
+                      DateTimeFormatter.dateTime12Hour(currentIncident.createdAt),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                       ),
@@ -884,38 +885,6 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
           : widget.currentUser.role.displayName;
     }
     return createdBy;
-  }
-
-  String _formatDate(DateTime dt) {
-    final day = dt.day.toString().padLeft(2, '0');
-    final month = dt.month.toString().padLeft(2, '0');
-    final year = dt.year.toString();
-    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $ampm • $day-$month-$year';
-  }
-
-  String _formatTimeAgo(DateTime dt) {
-    final now = DateTime.now();
-    final difference = now.difference(dt);
-
-    if (difference.isNegative || difference.inSeconds < 45) {
-      return 'just now';
-    } else if (difference.inMinutes < 60) {
-      final mins = difference.inMinutes;
-      return '$mins ${mins == 1 ? 'min' : 'mins'} ago';
-    } else if (difference.inHours < 24) {
-      final hours = difference.inHours;
-      return '$hours ${hours == 1 ? 'hour' : 'hours'} ago';
-    } else if (difference.inDays < 7) {
-      final days = difference.inDays;
-      return '$days ${days == 1 ? 'day' : 'days'} ago';
-    } else {
-      final day = dt.day.toString().padLeft(2, '0');
-      final month = dt.month.toString().padLeft(2, '0');
-      return '$day-$month-${dt.year}';
-    }
   }
 
   IconData _categoryIcon(String category) {

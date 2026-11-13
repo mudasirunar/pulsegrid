@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_time_formatter.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../domain/entities/activity_event_entity.dart';
 import '../../domain/entities/incident_entity.dart';
@@ -221,7 +222,7 @@ class IncidentTimelineView extends StatelessWidget {
 
     final title = _eventTitle(event);
     final subtitle = _eventSubtitle(event);
-    final timeStr = _formatTimestamp(event.timestamp);
+    final timeStr = DateTimeFormatter.timelineTimestamp(event.timestamp);
 
     return IntrinsicHeight(
       child: Row(
@@ -418,27 +419,5 @@ class IncidentTimelineView extends StatelessWidget {
     final clean = raw.replaceAll('IncidentStatus.', '').replaceAll('_', ' ').trim();
     if (clean.isEmpty) return clean;
     return clean[0].toUpperCase() + clean.substring(1).toLowerCase();
-  }
-
-  String _formatTimestamp(DateTime dt) {
-    final now = DateTime.now();
-    final isToday = dt.year == now.year && dt.month == now.month && dt.day == now.day;
-    final yesterday = now.subtract(const Duration(days: 1));
-    final isYesterday = dt.year == yesterday.year && dt.month == yesterday.month && dt.day == yesterday.day;
-
-    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-    final timeStr = '$hour:$minute $ampm';
-
-    if (isToday) {
-      return 'Today · $timeStr';
-    } else if (isYesterday) {
-      return 'Yesterday · $timeStr';
-    } else {
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      final monthStr = months[dt.month - 1];
-      return '$monthStr ${dt.day} · $timeStr';
-    }
   }
 }
