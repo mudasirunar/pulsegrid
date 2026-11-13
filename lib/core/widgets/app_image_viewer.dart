@@ -164,9 +164,9 @@ class _AppImageViewerState extends State<AppImageViewer>
 
           // 2. Gesture-controlled draggable image canvas
           GestureDetector(
-            onVerticalDragStart: _onVerticalDragStart,
-            onVerticalDragUpdate: _onVerticalDragUpdate,
-            onVerticalDragEnd: _onVerticalDragEnd,
+            onVerticalDragStart: _isZoomed ? null : _onVerticalDragStart,
+            onVerticalDragUpdate: _isZoomed ? null : _onVerticalDragUpdate,
+            onVerticalDragEnd: _isZoomed ? null : _onVerticalDragEnd,
             behavior: HitTestBehavior.translucent,
             child: Transform.translate(
               offset: Offset(0, _dragOffsetY),
