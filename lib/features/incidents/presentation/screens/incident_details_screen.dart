@@ -547,7 +547,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                               decoration: BoxDecoration(
                                 color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: isDark ? AppColors.borderDark : AppColors.borderLight,
                                 ),
@@ -582,7 +582,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                               color: _severityColor(currentIncident.severity).withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: _severityColor(currentIncident.severity).withValues(alpha: 0.45),
                               ),

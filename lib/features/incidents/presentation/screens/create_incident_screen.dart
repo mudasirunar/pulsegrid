@@ -869,7 +869,7 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 3.0),
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(12),
                           onTap: isSubmitting
                               ? null
                               : () => setState(() => _selectedSeverity = sev),
@@ -883,7 +883,7 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
                                   : (isDark
                                         ? AppColors.surfaceDark
                                         : Colors.white),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: isSelected
                                     ? color

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -120,12 +122,18 @@ class _AppOverflowMenuState extends State<AppOverflowMenu>
     final buttonOffset = renderBox.localToGlobal(Offset.zero, ancestor: overlay);
     final menuWidth = widget.menuWidth;
     const double arrowHeight = 8.0;
-    const double arrowWidth = 14.0;
-    final double arrowOffsetFromRight =
-        (renderBox.size.width / 2).clamp(20.0, menuWidth - 20.0);
+    const double arrowWidth = 10.0;
+    const double bubbleRadius = 9.0;
     final double topPos = buttonOffset.dy + renderBox.size.height - 10;
-    final double rightPos =
-        overlay.size.width - (buttonOffset.dx + renderBox.size.width);
+    final double rightPos = math.max(
+      10.0,
+      overlay.size.width - (buttonOffset.dx + renderBox.size.width),
+    );
+    final double buttonCenterFromRight =
+        overlay.size.width - (buttonOffset.dx + renderBox.size.width / 2);
+    const double minArrowOffset = bubbleRadius + (arrowWidth / 2);
+    final double arrowOffsetFromRight = (buttonCenterFromRight - rightPos)
+        .clamp(minArrowOffset, menuWidth - minArrowOffset);
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -175,7 +183,7 @@ class _AppOverflowMenuState extends State<AppOverflowMenu>
                       arrowHeight: arrowHeight,
                       arrowWidth: arrowWidth,
                       arrowOffsetFromRight: arrowOffsetFromRight,
-                      borderRadius: 12.0,
+                      borderRadius: bubbleRadius,
                     ),
                     child: SizedBox(
                       width: menuWidth,

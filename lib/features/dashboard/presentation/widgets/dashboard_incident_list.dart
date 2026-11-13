@@ -14,6 +14,7 @@ class DashboardIncidentList extends StatelessWidget {
   final IncidentState incidentState;
   final List<IncidentEntity> allIncidents;
   final List<IncidentEntity> visibleIncidents;
+  final Map<String, String> incidentAssigneeNames;
   final Map<String, SyncStatus> incidentSyncStates;
   final UserModel user;
   final VoidCallback onRetryLoad;
@@ -24,6 +25,7 @@ class DashboardIncidentList extends StatelessWidget {
     required this.incidentState,
     required this.allIncidents,
     required this.visibleIncidents,
+    required this.incidentAssigneeNames,
     required this.incidentSyncStates,
     required this.user,
     required this.onRetryLoad,
@@ -122,11 +124,18 @@ class DashboardIncidentList extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: visibleIncidents.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 10),
+          separatorBuilder: (_, _) => Divider(
+            height: 24,
+            thickness: 1,
+            indent: 16,
+            endIndent: 16,
+            color: isDark ? AppColors.borderDark : AppColors.borderLight,
+          ),
           itemBuilder: (context, index) {
             final incident = visibleIncidents[index];
             return IncidentCard(
               incident: incident,
+              assignedToName: incidentAssigneeNames[incident.id],
               syncStatus: incidentSyncStates[incident.id],
               onTap: () {
                 Navigator.push(

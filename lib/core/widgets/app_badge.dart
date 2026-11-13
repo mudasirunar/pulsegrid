@@ -14,7 +14,7 @@ class AppBadge extends StatelessWidget {
     required this.text,
     required this.color,
     this.icon,
-    this.borderRadius = 6.0,
+    this.borderRadius = 12.0,
     this.isOutlined = false,
     this.fontSize = 11.0,
     this.padding = const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),

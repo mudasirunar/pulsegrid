@@ -8,6 +8,7 @@ import '../../../../core/database/local_data_source.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../auth/data/models/user_model.dart';
 import '../../../incidents/domain/entities/incident_entity.dart';
+import '../../../incidents/domain/repositories/incident_repository.dart';
 import '../../../incidents/presentation/bloc/incident_bloc.dart';
 import '../../../incidents/presentation/bloc/incident_event.dart';
 import '../../../incidents/presentation/bloc/incident_state.dart';
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   DashboardFilterState _filterState = const DashboardFilterState();
   Map<String, String> _incidentAssignees = {};
+  Map<String, String> _incidentAssigneeNames = {};
   Map<String, SyncStatus> _incidentSyncStates = {};
 
   @override
@@ -64,6 +66,21 @@ class _HomeScreenState extends State<HomeScreen> {
         assignees[a.incidentId] = a.responderId;
       }
 
+      final responderNames = <String, String>{
+        widget.user.id: widget.user.displayName,
+      };
+      if (di.sl.isRegistered<IncidentRepository>()) {
+        final responders = await di.sl<IncidentRepository>().getResponders();
+        for (final r in responders) {
+          responderNames[r.id] = r.displayName;
+        }
+      }
+
+      final assigneeNames = <String, String>{};
+      for (final entry in assignees.entries) {
+        assigneeNames[entry.key] = responderNames[entry.value] ?? entry.value;
+      }
+
       final syncMap = <String, SyncStatus>{};
       for (final op in syncOps) {
         if (op.entityType != 'INCIDENT') continue;
@@ -79,6 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           _incidentAssignees = assignees;
+          _incidentAssigneeNames = assigneeNames;
           _incidentSyncStates = syncMap;
         });
       }
@@ -218,6 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       incidentState: state,
                       allIncidents: allIncidents,
                       visibleIncidents: visibleIncidents,
+                      incidentAssigneeNames: _incidentAssigneeNames,
                       incidentSyncStates: _incidentSyncStates,
                       user: widget.user,
                       onRetryLoad: () => context
