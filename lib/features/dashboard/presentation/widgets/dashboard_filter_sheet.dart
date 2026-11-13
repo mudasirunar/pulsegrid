@@ -71,7 +71,7 @@ Future<DashboardFilterState?> showDashboardFilterSheet({
                                 tempStatus = DashboardStatusFilter.all;
                                 tempSeverity = null;
                                 tempAssignment = DashboardAssignmentFilter.all;
-                                tempSort = DashboardSort.recent;
+                                tempSort = DashboardSort.newest;
                               });
                             },
                             child: const Text('Reset'),
@@ -85,10 +85,10 @@ Future<DashboardFilterState?> showDashboardFilterSheet({
                     _HorizontalChipRow(
                       children: [
                         _FilterOptionChip(
-                          label: 'Most Recent',
-                          selected: tempSort == DashboardSort.recent,
+                          label: 'Newest',
+                          selected: tempSort == DashboardSort.newest,
                           onTap: () => setSheetState(
-                            () => tempSort = DashboardSort.recent,
+                            () => tempSort = DashboardSort.newest,
                           ),
                         ),
                         _FilterOptionChip(
@@ -96,6 +96,13 @@ Future<DashboardFilterState?> showDashboardFilterSheet({
                           selected: tempSort == DashboardSort.oldest,
                           onTap: () => setSheetState(
                             () => tempSort = DashboardSort.oldest,
+                          ),
+                        ),
+                        _FilterOptionChip(
+                          label: 'Last Updated',
+                          selected: tempSort == DashboardSort.recentlyUpdated,
+                          onTap: () => setSheetState(
+                            () => tempSort = DashboardSort.recentlyUpdated,
                           ),
                         ),
                         _FilterOptionChip(

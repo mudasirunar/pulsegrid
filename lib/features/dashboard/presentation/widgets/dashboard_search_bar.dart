@@ -225,15 +225,19 @@ class _ActiveFilterChipsRow extends StatelessWidget {
         ),
       ));
     }
-    if (filterState.sortBy != DashboardSort.recent) {
+    if (filterState.sortBy != DashboardSort.newest) {
+      final sortLabel = switch (filterState.sortBy) {
+        DashboardSort.oldest => 'Sort: Oldest',
+        DashboardSort.recentlyUpdated => 'Sort: Last Updated',
+        DashboardSort.severity => 'Sort: Severity',
+        DashboardSort.newest => 'Sort: Newest',
+      };
       chips.add(_RemovableFilterChip(
-        label: filterState.sortBy == DashboardSort.oldest
-            ? 'Sort: Oldest'
-            : 'Sort: Severity',
+        label: sortLabel,
         isDark: isDark,
         borderColor: borderColor,
         onRemove: () => onFilterChanged(
-          filterState.copyWith(sortBy: DashboardSort.recent),
+          filterState.copyWith(sortBy: DashboardSort.newest),
         ),
       ));
     }

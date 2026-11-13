@@ -17,7 +17,7 @@ enum DashboardStatusFilter {
 
 enum DashboardAssignmentFilter { all, assignedToMe, assigned, unassigned }
 
-enum DashboardSort { recent, oldest, severity }
+enum DashboardSort { newest, oldest, recentlyUpdated, severity }
 
 class DashboardFilterState {
   final String searchQuery;
@@ -31,7 +31,7 @@ class DashboardFilterState {
     this.statusFilter = DashboardStatusFilter.all,
     this.severityFilter,
     this.assignmentFilter = DashboardAssignmentFilter.all,
-    this.sortBy = DashboardSort.recent,
+    this.sortBy = DashboardSort.newest,
   });
 
   int get activeCount {
@@ -39,7 +39,7 @@ class DashboardFilterState {
     if (statusFilter != DashboardStatusFilter.all) count++;
     if (severityFilter != null) count++;
     if (assignmentFilter != DashboardAssignmentFilter.all) count++;
-    if (sortBy != DashboardSort.recent) count++;
+    if (sortBy != DashboardSort.newest) count++;
     return count;
   }
 
@@ -115,15 +115,17 @@ class DashboardFilterState {
 
     filtered.sort((a, b) {
       switch (sortBy) {
-        case DashboardSort.recent:
-          return b.updatedAt.compareTo(a.updatedAt);
+        case DashboardSort.newest:
+          return b.createdAt.compareTo(a.createdAt);
         case DashboardSort.oldest:
-          return a.updatedAt.compareTo(b.updatedAt);
+          return a.createdAt.compareTo(b.createdAt);
+        case DashboardSort.recentlyUpdated:
+          return b.updatedAt.compareTo(a.updatedAt);
         case DashboardSort.severity:
           final sevCompare =
               b.severity.priorityWeight.compareTo(a.severity.priorityWeight);
           if (sevCompare != 0) return sevCompare;
-          return b.updatedAt.compareTo(a.updatedAt);
+          return b.createdAt.compareTo(a.createdAt);
       }
     });
 
