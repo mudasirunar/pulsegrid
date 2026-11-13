@@ -17,7 +17,7 @@ enum DashboardStatusFilter {
 
 enum DashboardAssignmentFilter { all, assignedToMe, assigned, unassigned }
 
-enum DashboardSort { recent, severity }
+enum DashboardSort { recent, oldest, severity }
 
 class DashboardFilterState {
   final String searchQuery;
@@ -114,12 +114,17 @@ class DashboardFilterState {
     }).toList();
 
     filtered.sort((a, b) {
-      if (sortBy == DashboardSort.severity) {
-        final sevCompare =
-            b.severity.priorityWeight.compareTo(a.severity.priorityWeight);
-        if (sevCompare != 0) return sevCompare;
+      switch (sortBy) {
+        case DashboardSort.recent:
+          return b.updatedAt.compareTo(a.updatedAt);
+        case DashboardSort.oldest:
+          return a.updatedAt.compareTo(b.updatedAt);
+        case DashboardSort.severity:
+          final sevCompare =
+              b.severity.priorityWeight.compareTo(a.severity.priorityWeight);
+          if (sevCompare != 0) return sevCompare;
+          return b.updatedAt.compareTo(a.updatedAt);
       }
-      return b.updatedAt.compareTo(a.updatedAt);
     });
 
     return filtered;

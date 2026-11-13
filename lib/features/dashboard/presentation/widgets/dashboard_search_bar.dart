@@ -227,7 +227,9 @@ class _ActiveFilterChipsRow extends StatelessWidget {
     }
     if (filterState.sortBy != DashboardSort.recent) {
       chips.add(_RemovableFilterChip(
-        label: 'Sort: Severity',
+        label: filterState.sortBy == DashboardSort.oldest
+            ? 'Sort: Oldest'
+            : 'Sort: Severity',
         isDark: isDark,
         borderColor: borderColor,
         onRemove: () => onFilterChanged(
