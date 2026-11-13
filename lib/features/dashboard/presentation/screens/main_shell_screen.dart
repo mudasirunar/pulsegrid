@@ -41,6 +41,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true,
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           IndexedStack(

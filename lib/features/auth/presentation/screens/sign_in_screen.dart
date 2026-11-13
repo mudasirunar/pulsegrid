@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -99,8 +100,14 @@ class _SignInScreenState extends State<SignInScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      body: BlocConsumer<AuthBloc, AuthState>(
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: defaultTargetPlatform == TargetPlatform.iOS
+          ? () => FocusManager.instance.primaryFocus?.unfocus()
+          : null,
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthError) {
             AppSnackBar.showError(
@@ -113,6 +120,12 @@ class _SignInScreenState extends State<SignInScreen> {
           final isLoading = state is AuthLoading;
 
           return SingleChildScrollView(
+            keyboardDismissBehavior: defaultTargetPlatform == TargetPlatform.iOS
+                ? ScrollViewKeyboardDismissBehavior.onDrag
+                : ScrollViewKeyboardDismissBehavior.manual,
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(context).bottom + 24.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -243,6 +256,7 @@ class _SignInScreenState extends State<SignInScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }

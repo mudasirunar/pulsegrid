@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_cubit.dart';
 import 'core/utils/photo_file_resolver.dart';
+import 'core/widgets/keyboard_focus_scroll_handler.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
@@ -60,6 +61,9 @@ class PulseGridApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: themeMode,
+          builder: (context, child) => KeyboardFocusScrollHandler(
+            child: child ?? const SizedBox.shrink(),
+          ),
           home: BlocBuilder<AuthBloc, AuthState>(
             builder: (context, state) {
               if (state is Authenticated) {

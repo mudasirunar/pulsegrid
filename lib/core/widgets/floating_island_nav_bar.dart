@@ -150,12 +150,11 @@ class _FloatingIslandNavBarState extends State<FloatingIslandNavBar>
         : const Color(0xFFD97706).withValues(alpha: 0.13);
 
     const ctaColor = Color(0xFFF59E0B);
+    final bottomSafeInset = MediaQuery.viewPaddingOf(context).bottom;
 
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18.0, 0.0, 18.0, 12.0),
-        child: Row(
+    return Padding(
+      padding: EdgeInsets.fromLTRB(18.0, 0.0, 18.0, 12.0 + bottomSafeInset),
+      child: Row(
           children: [
             // Left Pill Dock (~75% width)
             Expanded(
@@ -337,8 +336,7 @@ class _FloatingIslandNavBarState extends State<FloatingIslandNavBar>
             ],
           ],
         ),
-      ),
-    );
+      );
   }
 }
 

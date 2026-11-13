@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -137,12 +140,21 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
       child: Scaffold(
+        resizeToAvoidBottomInset: false,
         body: SafeArea(
           bottom: false,
           child: SingleChildScrollView(
             controller: widget.scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20.0, 14.0, 20.0, 108.0),
+            keyboardDismissBehavior: defaultTargetPlatform == TargetPlatform.iOS
+                ? ScrollViewKeyboardDismissBehavior.onDrag
+                : ScrollViewKeyboardDismissBehavior.manual,
+            padding: EdgeInsets.fromLTRB(
+              20.0,
+              14.0,
+              20.0,
+              math.max(108.0, MediaQuery.viewInsetsOf(context).bottom + 24.0),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
