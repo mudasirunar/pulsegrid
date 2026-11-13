@@ -9,7 +9,7 @@ import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
 import 'features/auth/presentation/screens/sign_in_screen.dart';
-import 'features/dashboard/presentation/screens/home_screen.dart';
+import 'features/dashboard/presentation/screens/main_shell_screen.dart';
 import 'features/incidents/presentation/bloc/incident_bloc.dart';
 import 'features/incidents/presentation/bloc/incident_event.dart';
 import 'features/resources/presentation/cubit/resource_cubit.dart';
@@ -63,7 +63,7 @@ class PulseGridApp extends StatelessWidget {
           home: BlocBuilder<AuthBloc, AuthState>(
             builder: (context, state) {
               if (state is Authenticated) {
-                return HomeScreen(user: state.user);
+                return MainShellScreen(user: state.user);
               }
               if (state is AuthInitial) {
                 return const Scaffold(

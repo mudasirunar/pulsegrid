@@ -48,27 +48,8 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      floatingActionButton: user.role.isReadOnly
-          ? null
-          : FloatingActionButton.extended(
-              backgroundColor: AppColors.primaryLight,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add_alert_outlined),
-              label: const Text(
-                'Report Incident',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CreateIncidentScreen(currentUser: user),
-                  ),
-                );
-              },
-            ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+        padding: const EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 108.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
