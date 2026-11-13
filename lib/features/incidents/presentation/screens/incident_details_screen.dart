@@ -96,6 +96,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
   ScopedIncidentSubscription? _scopedSyncSubscription;
   StreamSubscription<String>? _tableSubscription;
   StreamSubscription<String>? _remoteDeleteSubscription;
+  StreamSubscription<Map<String, String>>? _userNamesSubscription;
   bool _hasShownRemoteDeleteDialog = false;
   bool _isDeletingSelf = false;
 
@@ -145,6 +146,15 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
           _showRemoteDeletedDialog();
         }
       });
+      _userNamesSubscription = syncEngine.onUserNamesUpdated.listen((names) {
+        if (!mounted) return;
+        setState(() {
+          _responderNames = {
+            ..._responderNames,
+            ...names,
+          };
+        });
+      });
     }
 
     // Local reactive listener: re-renders timeline or incident quietly on SQLite updates
@@ -180,6 +190,10 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
       setState(() {
         _responderNames = {
           for (final r in responders) r.id: r.displayName,
+          if (di.sl.isRegistered<SyncEngine>())
+            ...di.sl<SyncEngine>().latestUserNames,
+          if (widget.currentUser.displayName.trim().isNotEmpty)
+            widget.currentUser.id: widget.currentUser.displayName,
         };
       });
     } catch (_) {}
@@ -205,6 +219,17 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
   String? _resolveAssignedResponderName() {
     final assignment = _assignment;
     if (assignment == null) return null;
+
+    if (assignment.responderId == widget.currentUser.id &&
+        widget.currentUser.displayName.trim().isNotEmpty) {
+      return widget.currentUser.displayName;
+    }
+
+    if (di.sl.isRegistered<SyncEngine>()) {
+      final liveName = di.sl<SyncEngine>().latestUserNames[assignment.responderId];
+      if (liveName != null && liveName.trim().isNotEmpty) return liveName;
+    }
+
     final known = _responderNames[assignment.responderId];
     if (known != null && known.trim().isNotEmpty) return known;
 
@@ -216,10 +241,6 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
       }
     }
 
-    if (assignment.responderId == widget.currentUser.id &&
-        widget.currentUser.displayName.trim().isNotEmpty) {
-      return widget.currentUser.displayName;
-    }
     return 'Responder';
   }
 
@@ -327,6 +348,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
   void dispose() {
     _overflowMenuController.closeImmediate();
     _remoteDeleteSubscription?.cancel();
+    _userNamesSubscription?.cancel();
     _scopedSyncSubscription?.cancel();
     _tableSubscription?.cancel();
     if (_ownsCubit) {
@@ -858,6 +880,7 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
                   isLoading: _isLoadingTimeline,
                   currentUser: widget.currentUser,
                   incident: currentIncident,
+                  userNames: _responderNames,
                 ),
                 const SizedBox(height: 32),
               ],
@@ -870,9 +893,16 @@ class _IncidentDetailsScreenState extends State<IncidentDetailsScreen> {
 }
 
   String _resolveReporterName(String createdBy) {
-    if (createdBy == widget.currentUser.id && widget.currentUser.displayName.trim().isNotEmpty) {
+    if (createdBy == widget.currentUser.id &&
+        widget.currentUser.displayName.trim().isNotEmpty) {
       return widget.currentUser.displayName;
     }
+    if (di.sl.isRegistered<SyncEngine>()) {
+      final liveName = di.sl<SyncEngine>().resolveUserName(createdBy);
+      if (liveName != null && liveName.trim().isNotEmpty) return liveName;
+    }
+    final known = _responderNames[createdBy];
+    if (known != null && known.trim().isNotEmpty) return known;
     if (createdBy == 'user-coordinator-01') return 'Sarah Chen';
     if (createdBy == 'user-responder-01') return 'Marcus Vance';
     if (createdBy == 'user-viewer-01') return 'Auditor Evans';

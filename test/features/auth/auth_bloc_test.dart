@@ -109,5 +109,23 @@ void main() {
     await pumpEventQueue();
     expect(await repository.getCurrentUser(), isNull);
   });
+
+  test('UpdateDisplayNameEvent updates user displayName and persists session', () async {
+    await repository.signInWithRole(UserRole.responder);
+
+    final expected = [
+      predicate<AuthState>((state) {
+        return state is Authenticated &&
+            state.user.displayName == 'Marcus Updated';
+      }),
+    ];
+
+    expectLater(authBloc.stream, emitsInOrder(expected));
+    authBloc.add(const UpdateDisplayNameEvent('  Marcus Updated  '));
+
+    await pumpEventQueue();
+    final persisted = await repository.getCurrentUser();
+    expect(persisted?.displayName, 'Marcus Updated');
+  });
 }
 

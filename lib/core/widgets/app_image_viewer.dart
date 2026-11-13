@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../preferences/app_preferences_cubit.dart';
 
 import '../utils/photo_file_resolver.dart';
 import 'app_photo_placeholder.dart';
@@ -132,7 +135,13 @@ class _AppImageViewerState extends State<AppImageViewer>
   }
 
   void _closeViewer() {
-    HapticFeedback.lightImpact();
+    var hapticsEnabled = true;
+    try {
+      hapticsEnabled = context.read<AppPreferencesCubit>().state.hapticEnabled;
+    } catch (_) {}
+    if (hapticsEnabled) {
+      HapticFeedback.lightImpact();
+    }
     Navigator.of(context).pop();
   }
 

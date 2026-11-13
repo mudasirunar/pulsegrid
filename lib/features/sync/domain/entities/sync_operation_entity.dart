@@ -88,7 +88,8 @@ enum SyncEntityType {
   incident,
   resource,
   assignment,
-  activityEvent;
+  activityEvent,
+  userProfile;
 
   static SyncEntityType fromString(String value) {
     switch (value.toUpperCase()) {
@@ -99,6 +100,8 @@ enum SyncEntityType {
         return SyncEntityType.assignment;
       case 'ACTIVITY_EVENT':
         return SyncEntityType.activityEvent;
+      case 'USER_PROFILE':
+        return SyncEntityType.userProfile;
       case 'INCIDENT':
       default:
         return SyncEntityType.incident;
@@ -115,6 +118,8 @@ enum SyncEntityType {
         return 'ASSIGNMENT';
       case SyncEntityType.activityEvent:
         return 'ACTIVITY_EVENT';
+      case SyncEntityType.userProfile:
+        return 'USER_PROFILE';
     }
   }
 }

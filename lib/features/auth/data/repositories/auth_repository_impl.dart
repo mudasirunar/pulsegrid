@@ -1,9 +1,15 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../../core/database/local_data_source.dart';
 import '../../../../core/errors/exceptions.dart';
+import '../../../sync/data/models/sync_operation_model.dart';
+import '../../../sync/domain/entities/sync_operation_entity.dart';
 import '../../domain/entities/user_role.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../models/user_model.dart';
@@ -13,11 +19,13 @@ class AuthRepositoryImpl implements AuthRepository {
   final SharedPreferences sharedPreferences;
   final FirebaseAuth? firebaseAuth;
   final FirebaseFirestore? firestore;
+  final LocalDataSource? localDataSource;
 
   AuthRepositoryImpl({
     required this.sharedPreferences,
     this.firebaseAuth,
     this.firestore,
+    this.localDataSource,
   });
 
   // Pre-configured default credentials for the 3 roles
@@ -177,6 +185,102 @@ class AuthRepositoryImpl implements AuthRepository {
 
     await _persistSession(user);
     return user;
+  }
+
+  @override
+  Future<UserModel> updateDisplayName(
+    String newDisplayName, {
+    bool syncRemote = true,
+  }) async {
+    final trimmed = newDisplayName.trim();
+    if (trimmed.isEmpty) {
+      throw const AuthException('Display name cannot be empty.');
+    }
+
+    final current = await getCurrentUser();
+    if (current == null) {
+      throw const AuthException('No authenticated user found.');
+    }
+
+    final updated = UserModel(
+      id: current.id,
+      email: current.email,
+      displayName: trimmed,
+      rank: current.rank,
+      role: current.role,
+    );
+
+    await _persistSession(updated);
+
+    if (!syncRemote) {
+      return updated;
+    }
+
+    unawaited(_syncDisplayNameRemotely(updated));
+    return updated;
+  }
+
+  Future<void> _syncDisplayNameRemotely(UserModel updated) async {
+    try {
+      if (firebaseAuth != null || Firebase.apps.isNotEmpty) {
+        final auth = firebaseAuth ?? FirebaseAuth.instance;
+        await auth.currentUser?.updateDisplayName(updated.displayName);
+      }
+    } catch (_) {}
+
+    bool remoteSynced = false;
+    try {
+      if (firestore != null || Firebase.apps.isNotEmpty) {
+        final db = firestore ?? FirebaseFirestore.instance;
+        await db.collection('users').doc(updated.id).set({
+          'displayName': updated.displayName,
+          'rank': updated.rank,
+          'role': updated.role.name,
+          'email': updated.email,
+        }, SetOptions(merge: true));
+        remoteSynced = true;
+      }
+    } catch (_) {}
+
+    if (!remoteSynced && localDataSource != null) {
+      final syncOp = SyncOperationModel(
+        operationId: const Uuid().v4(),
+        entityId: updated.id,
+        entityType: SyncEntityType.userProfile.toDbValue(),
+        operationType: SyncOperationType.update.toDbValue(),
+        payload: jsonEncode({
+          'id': updated.id,
+          'displayName': updated.displayName,
+          'rank': updated.rank,
+          'role': updated.role.name,
+          'email': updated.email,
+        }),
+        createdAt: DateTime.now().toUtc(),
+        syncState: SyncStatus.pending.toDbValue(),
+      );
+      await localDataSource!.enqueueSyncOperation(syncOp);
+    }
+  }
+
+  @override
+  Future<UserModel> applyRemoteRank(String newRank) async {
+    final trimmed = newRank.trim();
+    if (trimmed.isEmpty) {
+      throw const AuthException('Rank cannot be empty.');
+    }
+    final current = await getCurrentUser();
+    if (current == null) {
+      throw const AuthException('No authenticated user found.');
+    }
+    final updated = UserModel(
+      id: current.id,
+      email: current.email,
+      displayName: current.displayName,
+      rank: trimmed,
+      role: current.role,
+    );
+    await _persistSession(updated);
+    return updated;
   }
 
   @override

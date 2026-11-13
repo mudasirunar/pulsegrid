@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_time_formatter.dart';
+import '../../../../injection_container.dart' as di;
 import '../../../auth/domain/entities/user_entity.dart';
+import '../../../sync/domain/services/sync_engine.dart';
 import '../../domain/entities/activity_event_entity.dart';
 import '../../domain/entities/incident_entity.dart';
 import '../../domain/entities/incident_status.dart';
@@ -12,6 +14,7 @@ class IncidentTimelineView extends StatelessWidget {
   final bool isLoading;
   final UserEntity? currentUser;
   final IncidentEntity? incident;
+  final Map<String, String> userNames;
 
   const IncidentTimelineView({
     super.key,
@@ -19,6 +22,7 @@ class IncidentTimelineView extends StatelessWidget {
     this.isLoading = false,
     this.currentUser,
     this.incident,
+    this.userNames = const {},
   });
 
   @override
@@ -354,14 +358,17 @@ class IncidentTimelineView extends StatelessWidget {
     } else if (event.eventType == ActivityEventType.assignmentChange &&
         event.newValue != null &&
         event.newValue!.trim().isNotEmpty) {
+      final resolvedNew = _resolveActorName(event.newValue!);
       if (event.oldValue != null && event.oldValue!.trim().isNotEmpty) {
-        parts.add('${event.oldValue!.trim()} → ${event.newValue!.trim()}');
+        final resolvedOld = _resolveActorName(event.oldValue!);
+        parts.add('$resolvedOld → $resolvedNew');
       } else {
-        parts.add('Assigned to ${event.newValue!.trim()}');
+        parts.add('Assigned to $resolvedNew');
       }
     } else if (event.newValue != null &&
         event.newValue!.trim().isNotEmpty &&
-        event.eventType != ActivityEventType.statusChange) {
+        event.eventType != ActivityEventType.statusChange &&
+        event.eventType != ActivityEventType.incidentCreated) {
       parts.add(event.newValue!.trim());
     }
 
@@ -372,7 +379,7 @@ class IncidentTimelineView extends StatelessWidget {
     final clean = rawActor.trim();
     if (clean.isEmpty) return 'System';
 
-    // 1. Matches current user
+    // 1. Matches current user (by id or email)
     if (currentUser != null) {
       if (clean == currentUser!.id || clean == currentUser!.email) {
         if (currentUser!.displayName.trim().isNotEmpty) {
@@ -380,6 +387,20 @@ class IncidentTimelineView extends StatelessWidget {
         }
         return currentUser!.role.displayName;
       }
+    }
+
+    // 1b. Matches live synced user directory (handles UIDs and dynamic aliases)
+    if (di.sl.isRegistered<SyncEngine>()) {
+      final liveName = di.sl<SyncEngine>().resolveUserName(clean);
+      if (liveName != null && liveName.trim().isNotEmpty) {
+        return liveName.trim();
+      }
+    }
+
+    // 1c. Matches passed userNames map (e.g. responder directory)
+    final mappedName = userNames[clean];
+    if (mappedName != null && mappedName.trim().isNotEmpty) {
+      return mappedName.trim();
     }
 
     // 2. Matches demo accounts

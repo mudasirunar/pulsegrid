@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'core/preferences/app_preferences_cubit.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_cubit.dart';
 import 'core/utils/photo_file_resolver.dart';
@@ -30,6 +31,7 @@ void main() async {
     MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => di.sl<ThemeCubit>()),
+        BlocProvider(create: (_) => di.sl<AppPreferencesCubit>()),
         BlocProvider(
           create: (_) => di.sl<AuthBloc>()..add(const CheckAuthStatusEvent()),
         ),

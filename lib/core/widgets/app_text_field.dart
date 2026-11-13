@@ -16,6 +16,7 @@ class AppTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final VoidCallback? onEditingComplete;
   final bool enabled;
+  final bool autofocus;
   final int maxLines;
   final int? minLines;
   final double borderRadius;
@@ -37,6 +38,7 @@ class AppTextField extends StatelessWidget {
     this.onChanged,
     this.onEditingComplete,
     this.enabled = true,
+    this.autofocus = false,
     this.maxLines = 1,
     this.minLines,
     this.borderRadius = 8.0,
@@ -75,6 +77,7 @@ class AppTextField extends StatelessWidget {
           onChanged: onChanged,
           onEditingComplete: onEditingComplete,
           enabled: enabled,
+          autofocus: autofocus,
           maxLines: maxLines,
           minLines: minLines,
           style: theme.textTheme.bodyMedium?.copyWith(

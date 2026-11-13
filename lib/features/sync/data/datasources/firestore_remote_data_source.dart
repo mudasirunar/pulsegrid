@@ -16,6 +16,7 @@ abstract class FirestoreRemoteDataSource {
   Future<void> pushResourceLog(Map<String, dynamic> resourceData);
   Future<void> pushActivityEvent(Map<String, dynamic> eventData);
   Future<void> pushAssignment(Map<String, dynamic> assignmentData);
+  Future<void> pushUserProfile(Map<String, dynamic> userData);
   Future<void> deleteIncident(String incidentId);
   Future<List<Map<String, dynamic>>> pullIncidents();
   Future<Set<String>> pullDeletedIncidentIds();
@@ -34,6 +35,7 @@ abstract class FirestoreRemoteDataSource {
   Stream<List<Map<String, dynamic>>> watchResourceLogs(String incidentId);
   Stream<List<Map<String, dynamic>>> watchActivityEvents(String incidentId);
   Stream<List<Map<String, dynamic>>> watchAssignments(String incidentId);
+  Stream<List<Map<String, dynamic>>> watchUsers();
 }
 
 class FirestoreRemoteDataSourceImpl implements FirestoreRemoteDataSource {
@@ -463,6 +465,27 @@ class FirestoreRemoteDataSourceImpl implements FirestoreRemoteDataSource {
           .map((d) {
         final data = Map<String, dynamic>.from(d.data());
         data[DatabaseConstants.colId] = d.id;
+        return data;
+      }).toList();
+    });
+  }
+
+  @override
+  Future<void> pushUserProfile(Map<String, dynamic> userData) async {
+    final uid = userData['id'] as String?;
+    if (uid == null || uid.isEmpty) return;
+    final payload = Map<String, dynamic>.from(userData)..remove('id');
+    await _usersCol.doc(uid).set(payload, SetOptions(merge: true));
+  }
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchUsers() {
+    return _usersCol.snapshots().map((snapshot) {
+      return snapshot.docs
+          .where((d) => !d.metadata.hasPendingWrites)
+          .map((d) {
+        final data = Map<String, dynamic>.from(d.data());
+        data['id'] = d.id;
         return data;
       }).toList();
     });

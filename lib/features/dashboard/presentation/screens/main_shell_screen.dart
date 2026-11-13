@@ -20,16 +20,24 @@ class MainShellScreen extends StatefulWidget {
 class _MainShellScreenState extends State<MainShellScreen> {
   int _currentIndex = 0;
   final ScrollController _homeScrollController = ScrollController();
+  final ScrollController _profileScrollController = ScrollController();
 
   @override
   void dispose() {
     _homeScrollController.dispose();
+    _profileScrollController.dispose();
     super.dispose();
   }
 
   void _scrollToTop() {
     if (_currentIndex == 0 && _homeScrollController.hasClients) {
       _homeScrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 380),
+        curve: Curves.easeOutCubic,
+      );
+    } else if (_currentIndex == 1 && _profileScrollController.hasClients) {
+      _profileScrollController.animateTo(
         0.0,
         duration: const Duration(milliseconds: 380),
         curve: Curves.easeOutCubic,
@@ -51,7 +59,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 user: widget.user,
                 scrollController: _homeScrollController,
               ),
-              ProfileScreen(user: widget.user),
+              ProfileScreen(
+                user: widget.user,
+                scrollController: _profileScrollController,
+              ),
             ],
           ),
           Positioned(

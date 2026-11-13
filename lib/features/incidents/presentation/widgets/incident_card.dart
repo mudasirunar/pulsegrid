@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/preferences/app_preferences_cubit.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/app_badge.dart';
@@ -64,6 +66,12 @@ class IncidentCard extends StatelessWidget {
     final hasGps = incident.latitude != null && incident.longitude != null;
     final hasLocation = manualLocation.isNotEmpty || hasGps;
     final assignee = assignedToName?.trim() ?? '';
+    bool isCompact = false;
+    try {
+      isCompact = context.watch<AppPreferencesCubit>().state.compactCards;
+    } catch (_) {
+      isCompact = false;
+    }
 
     return Material(
       color: Colors.transparent,
@@ -122,7 +130,7 @@ class IncidentCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  maxLines: 2,
+                  maxLines: isCompact ? 1 : 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12.5,

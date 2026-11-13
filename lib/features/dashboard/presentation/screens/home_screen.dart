@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -13,6 +14,7 @@ import '../../../incidents/presentation/bloc/incident_bloc.dart';
 import '../../../incidents/presentation/bloc/incident_event.dart';
 import '../../../incidents/presentation/bloc/incident_state.dart';
 import '../../../sync/domain/entities/sync_operation_entity.dart';
+import '../../../sync/domain/services/sync_engine.dart';
 import '../../../sync/presentation/bloc/sync_bloc.dart';
 import '../../../sync/presentation/bloc/sync_state.dart';
 import '../widgets/dashboard_filter_sheet.dart';
@@ -41,15 +43,30 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, String> _incidentAssignees = {};
   Map<String, String> _incidentAssigneeNames = {};
   Map<String, SyncStatus> _incidentSyncStates = {};
+  StreamSubscription<Map<String, String>>? _userNamesSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadDashboardMetadata();
+    if (di.sl.isRegistered<SyncEngine>()) {
+      _userNamesSubscription = di.sl<SyncEngine>().onUserNamesUpdated.listen((_) {
+        if (mounted) _loadDashboardMetadata();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.user.displayName != widget.user.displayName) {
+      _loadDashboardMetadata();
+    }
   }
 
   @override
   void dispose() {
+    _userNamesSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -66,15 +83,17 @@ class _HomeScreenState extends State<HomeScreen> {
         assignees[a.incidentId] = a.responderId;
       }
 
-      final responderNames = <String, String>{
-        widget.user.id: widget.user.displayName,
-      };
+      final responderNames = <String, String>{};
       if (di.sl.isRegistered<IncidentRepository>()) {
         final responders = await di.sl<IncidentRepository>().getResponders();
         for (final r in responders) {
           responderNames[r.id] = r.displayName;
         }
       }
+      if (di.sl.isRegistered<SyncEngine>()) {
+        responderNames.addAll(di.sl<SyncEngine>().latestUserNames);
+      }
+      responderNames[widget.user.id] = widget.user.displayName;
 
       final assigneeNames = <String, String>{};
       for (final entry in assignees.entries) {
@@ -171,7 +190,13 @@ class _HomeScreenState extends State<HomeScreen> {
               20.0,
               14.0,
               20.0,
-              math.max(108.0, MediaQuery.viewInsetsOf(context).bottom + 24.0),
+              math.max(
+                120.0,
+                math.max(
+                  MediaQuery.viewPaddingOf(context).bottom + 96.0,
+                  MediaQuery.viewInsetsOf(context).bottom + 24.0,
+                ),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

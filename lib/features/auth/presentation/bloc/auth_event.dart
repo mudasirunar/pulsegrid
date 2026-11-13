@@ -38,3 +38,30 @@ class SignOutEvent extends AuthEvent {
   const SignOutEvent();
 }
 
+class UpdateDisplayNameEvent extends AuthEvent {
+  final String displayName;
+
+  const UpdateDisplayNameEvent(this.displayName);
+
+  @override
+  List<Object?> get props => [displayName];
+}
+
+class ApplyRemoteDisplayNameEvent extends AuthEvent {
+  final String displayName;
+
+  const ApplyRemoteDisplayNameEvent(this.displayName);
+
+  @override
+  List<Object?> get props => [displayName];
+}
+
+class ApplyRemoteRankEvent extends AuthEvent {
+  final String rank;
+
+  const ApplyRemoteRankEvent(this.rank);
+
+  @override
+  List<Object?> get props => [rank];
+}
+

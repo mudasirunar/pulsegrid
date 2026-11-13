@@ -4,7 +4,9 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../preferences/app_preferences_cubit.dart';
 import '../theme/app_colors.dart';
 
 /// A two-part floating island bottom navigation bar:
@@ -80,9 +82,17 @@ class _FloatingIslandNavBarState extends State<FloatingIslandNavBar>
     _controller.animateWith(simulation);
   }
 
+  bool get _hapticsEnabled {
+    try {
+      return context.read<AppPreferencesCubit>().state.hapticEnabled;
+    } catch (_) {
+      return true;
+    }
+  }
+
   void _selectIndex(int index, {double velocity = 0.0}) {
     if (index != widget.currentIndex) {
-      HapticFeedback.selectionClick();
+      if (_hapticsEnabled) HapticFeedback.selectionClick();
       widget.onTabSelected(index);
     }
     _animateTo(index.toDouble(), velocity: velocity);
@@ -91,7 +101,7 @@ class _FloatingIslandNavBarState extends State<FloatingIslandNavBar>
   void _handleTapUp(TapUpDetails details, double trackWidth) {
     final target = details.localPosition.dx < trackWidth * 0.5 ? 0 : 1;
     if (target == widget.currentIndex) {
-      HapticFeedback.selectionClick();
+      if (_hapticsEnabled) HapticFeedback.selectionClick();
       widget.onTabReselected?.call();
       _animateTo(target.toDouble());
       return;
@@ -310,7 +320,7 @@ class _FloatingIslandNavBarState extends State<FloatingIslandNavBar>
                 onTapDown: (_) => setState(() => _ctaPressed = true),
                 onTapUp: (_) {
                   setState(() => _ctaPressed = false);
-                  HapticFeedback.lightImpact();
+                  if (_hapticsEnabled) HapticFeedback.lightImpact();
                   widget.onActionPressed?.call();
                 },
                 onTapCancel: () => setState(() => _ctaPressed = false),

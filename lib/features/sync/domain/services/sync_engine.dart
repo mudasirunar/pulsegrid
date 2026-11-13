@@ -37,6 +37,7 @@ class SyncEngine {
   StreamSubscription<bool>? _connectivitySubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _remoteIncidentsSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _remoteAssignmentsSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _remoteUsersSubscription;
   StreamSubscription<String>? _remoteRemovedSubscription;
   StreamSubscription<List<String>>? _remoteDeletedTombstoneSubscription;
   StreamSubscription<String>? _tableSubscription;
@@ -45,11 +46,72 @@ class SyncEngine {
 
   final StreamController<String> _deletedIncidentController =
       StreamController<String>.broadcast();
+  final StreamController<Map<String, String>> _userNamesController =
+      StreamController<Map<String, String>>.broadcast();
+  final StreamController<Map<String, String>> _userRanksController =
+      StreamController<Map<String, String>>.broadcast();
+  final StreamController<Map<String, Map<String, dynamic>>> _userStatsController =
+      StreamController<Map<String, Map<String, dynamic>>>.broadcast();
+  final Map<String, String> _latestUserNames = {};
+  final Map<String, String> _latestUserRanks = {};
+  final Map<String, String> _nameAliases = {};
+  final Map<String, Map<String, dynamic>> _latestUserStats = {};
   final Set<String> _knownDeletedIds = {};
   final Set<String> _selfDeletingIds = {};
 
   /// Emits incident IDs that were deleted remotely by another user or device.
   Stream<String> get onIncidentDeletedRemote => _deletedIncidentController.stream;
+
+  /// Emits `{uid: displayName}` whenever remote `/users` profiles update.
+  Stream<Map<String, String>> get onUserNamesUpdated => _userNamesController.stream;
+
+  /// Emits `{uid: rank}` whenever remote `/users` ranks update.
+  Stream<Map<String, String>> get onUserRanksUpdated => _userRanksController.stream;
+
+  /// Emits `{uid: statsMap}` whenever remote `/users` stats update.
+  Stream<Map<String, Map<String, dynamic>>> get onUserStatsUpdated =>
+      _userStatsController.stream;
+
+  /// Most recent user display names seen from remote `/users` snapshots.
+  Map<String, String> get latestUserNames => Map.unmodifiable(_latestUserNames);
+
+  /// Most recent user ranks seen from remote `/users` snapshots.
+  Map<String, String> get latestUserRanks => Map.unmodifiable(_latestUserRanks);
+
+  /// Immediately updates the local in-memory user name cache and broadcasts it
+  /// to active listeners so UI surfaces reflect local renames without delay.
+  void updateLocalUserName(String userId, String displayName) {
+    final trimmed = displayName.trim();
+    if (userId.isEmpty || trimmed.isEmpty) return;
+    final previous = _latestUserNames[userId];
+    if (previous != null && previous.isNotEmpty && previous != trimmed) {
+      _nameAliases[previous] = userId;
+    }
+    _latestUserNames[userId] = trimmed;
+    if (!_userNamesController.isClosed) {
+      _userNamesController.add(Map.unmodifiable({userId: trimmed}));
+    }
+  }
+
+  /// Resolves a user UID (or a previously observed display name alias) to the
+  /// latest live display name.
+  String? resolveUserName(String rawIdOrAlias) {
+    final clean = rawIdOrAlias.trim();
+    if (clean.isEmpty) return null;
+    final direct = _latestUserNames[clean];
+    if (direct != null && direct.trim().isNotEmpty) return direct.trim();
+
+    final aliasedUid = _nameAliases[clean];
+    if (aliasedUid != null) {
+      final live = _latestUserNames[aliasedUid];
+      if (live != null && live.trim().isNotEmpty) return live.trim();
+    }
+    return null;
+  }
+
+  /// Most recent user stats maps seen from remote `/users` snapshots.
+  Map<String, Map<String, dynamic>> get latestUserStats =>
+      Map.unmodifiable(_latestUserStats);
 
   /// Marks an incident ID as being deleted by the current device so self-deletes
   /// do not trigger the "deleted by another user" alert dialog.
@@ -227,6 +289,49 @@ class SyncEngine {
       },
       onError: (_) {},
     );
+
+    _remoteUsersSubscription?.cancel();
+    _remoteUsersSubscription = remoteDataSource.watchUsers().listen(
+      (usersData) {
+        final updatedNames = <String, String>{};
+        final updatedRanks = <String, String>{};
+        final updatedStats = <String, Map<String, dynamic>>{};
+        for (final data in usersData) {
+          final id = data['id'] as String?;
+          if (id == null || id.isEmpty) continue;
+          final name = data['displayName'] as String?;
+          if (name != null && name.isNotEmpty) {
+            final previous = _latestUserNames[id];
+            if (previous != null && previous.isNotEmpty && previous != name) {
+              _nameAliases[previous] = id;
+            }
+            updatedNames[id] = name;
+            _latestUserNames[id] = name;
+          }
+          final rank = data['rank'] as String?;
+          if (rank != null && rank.isNotEmpty) {
+            updatedRanks[id] = rank;
+            _latestUserRanks[id] = rank;
+          }
+          final rawStats = data['stats'];
+          if (rawStats is Map) {
+            final statsMap = Map<String, dynamic>.from(rawStats);
+            updatedStats[id] = statsMap;
+            _latestUserStats[id] = statsMap;
+          }
+        }
+        if (updatedNames.isNotEmpty && !_userNamesController.isClosed) {
+          _userNamesController.add(Map.unmodifiable(updatedNames));
+        }
+        if (updatedRanks.isNotEmpty && !_userRanksController.isClosed) {
+          _userRanksController.add(Map.unmodifiable(updatedRanks));
+        }
+        if (updatedStats.isNotEmpty && !_userStatsController.isClosed) {
+          _userStatsController.add(Map.unmodifiable(updatedStats));
+        }
+      },
+      onError: (_) {},
+    );
   }
 
   Future<void> _mergeAndSaveRemoteAssignment(AssignmentModel model) async {
@@ -251,6 +356,8 @@ class SyncEngine {
     _remoteDeletedTombstoneSubscription = null;
     _remoteAssignmentsSubscription?.cancel();
     _remoteAssignmentsSubscription = null;
+    _remoteUsersSubscription?.cancel();
+    _remoteUsersSubscription = null;
   }
 
   /// Triggers an immediate background push of queued operations without blocking the caller.
@@ -375,6 +482,10 @@ class SyncEngine {
 
       case SyncEntityType.assignment:
         await remoteDataSource.pushAssignment(payloadMap);
+        break;
+
+      case SyncEntityType.userProfile:
+        await remoteDataSource.pushUserProfile(payloadMap);
         break;
     }
   }
@@ -528,14 +639,43 @@ class SyncEngine {
     }
   }
 
+  /// Pushes the user's computed operational stats to `/users/{userId}` or queues
+  /// a `USER_PROFILE` sync operation if offline.
+  Future<void> syncUserStats(String userId, Map<String, dynamic> stats) async {
+    final payload = {'id': userId, 'stats': stats};
+    try {
+      if (await networkInfo.isConnected) {
+        await remoteDataSource.pushUserProfile(payload);
+        return;
+      }
+    } catch (_) {}
+
+    try {
+      final op = SyncOperationEntity(
+        operationId: _uuid.v4(),
+        entityId: userId,
+        entityType: SyncEntityType.userProfile,
+        operationType: SyncOperationType.update,
+        payload: jsonEncode(payload),
+        createdAt: DateTime.now().toUtc(),
+        status: SyncStatus.pending,
+      );
+      await queueManager.syncRepository.enqueueOperation(op);
+    } catch (_) {}
+  }
+
   void dispose() {
     _connectivitySubscription?.cancel();
     _remoteIncidentsSubscription?.cancel();
     _remoteAssignmentsSubscription?.cancel();
+    _remoteUsersSubscription?.cancel();
     _remoteRemovedSubscription?.cancel();
     _remoteDeletedTombstoneSubscription?.cancel();
     _tableSubscription?.cancel();
     _authSubscription?.cancel();
     _deletedIncidentController.close();
+    _userNamesController.close();
+    _userRanksController.close();
+    _userStatsController.close();
   }
 }

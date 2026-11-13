@@ -85,11 +85,7 @@ class IncidentBloc extends Bloc<IncidentEvent, IncidentState> {
         longitude: event.longitude,
         manualLocationNotes: event.manualLocationNotes?.trim(),
         photoPaths: event.allPhotoPaths,
-        createdBy: event.creator.displayName.trim().isNotEmpty
-            ? event.creator.displayName.trim()
-            : (event.creator.email.trim().isNotEmpty
-                ? event.creator.email.trim()
-                : event.creator.id),
+        createdBy: event.creator.id,
         createdAt: now,
         updatedAt: now,
       );

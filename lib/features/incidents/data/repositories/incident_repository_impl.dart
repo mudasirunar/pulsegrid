@@ -206,14 +206,10 @@ class IncidentRepositoryImpl implements IncidentRepository {
         ? 'Updated ${changedFields.join(', ')}'
         : 'Details updated';
 
-    final actorName = actor.displayName.trim().isNotEmpty
-        ? actor.displayName.trim()
-        : (actor.email.trim().isNotEmpty ? actor.email.trim() : actor.id);
-
     final editEvent = ActivityEventModel(
       id: _uuid.v4(),
       incidentId: saved.id,
-      actorId: actorName,
+      actorId: actor.id,
       eventType: ActivityEventType.incidentEdited.value,
       oldValue: null,
       newValue: summary,
@@ -304,12 +300,6 @@ class IncidentRepositoryImpl implements IncidentRepository {
     await localDataSource.enqueueSyncOperation(deleteSyncOp);
   }
 
-  String _userDisplayName(UserEntity user) {
-    if (user.displayName.trim().isNotEmpty) return user.displayName.trim();
-    if (user.email.trim().isNotEmpty) return user.email.trim();
-    return user.id;
-  }
-
   @override
   Future<IncidentEntity> assignResponder({
     required String incidentId,
@@ -333,24 +323,10 @@ class IncidentRepositoryImpl implements IncidentRepository {
     final oldAssignment =
         await localDataSource.getAssignmentByIncidentId(incidentId);
 
-    String? oldResponderName;
-    if (oldAssignment != null && oldAssignment.responderId != responder.id) {
-      final cachedResponders = await getResponders(forceRefresh: false);
-      final match = cachedResponders.where((r) => r.id == oldAssignment.responderId);
-      if (match.isNotEmpty) {
-        oldResponderName = _userDisplayName(match.first);
-      } else {
-        final timeline = await localDataSource.getActivityTimeline(incidentId);
-        final lastAssign = timeline.where(
-          (e) => e.eventType == ActivityEventType.assignmentChange.value,
-        );
-        if (lastAssign.isNotEmpty && lastAssign.first.newValue != null) {
-          oldResponderName = lastAssign.first.newValue;
-        } else {
-          oldResponderName = oldAssignment.responderId;
-        }
-      }
-    }
+    final String? oldResponderId =
+        (oldAssignment != null && oldAssignment.responderId != responder.id)
+            ? oldAssignment.responderId
+            : null;
 
     final newAssignment = AssignmentModel(
       id: oldAssignment?.id ?? 'assign-$incidentId',
@@ -396,10 +372,10 @@ class IncidentRepositoryImpl implements IncidentRepository {
     final assignEvent = ActivityEventModel(
       id: _uuid.v4(),
       incidentId: incidentId,
-      actorId: _userDisplayName(actor),
+      actorId: actor.id,
       eventType: ActivityEventType.assignmentChange.value,
-      oldValue: oldResponderName,
-      newValue: _userDisplayName(responder),
+      oldValue: oldResponderId,
+      newValue: responder.id,
       timestamp: now,
     );
     await localDataSource.saveActivityEvent(assignEvent);

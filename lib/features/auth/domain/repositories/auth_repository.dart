@@ -11,6 +11,12 @@ abstract class AuthRepository {
   /// Sign-in using email and password credentials
   Future<UserModel> signInWithEmailPassword(String email, String password);
 
+  /// Updates the current user's display name locally and syncs to remote.
+  Future<UserModel> updateDisplayName(String newDisplayName, {bool syncRemote = true});
+
+  /// Updates the current user's rank in the local session cache.
+  Future<UserModel> applyRemoteRank(String newRank);
+
   /// Clears the active session and signs out
   Future<void> signOut();
 }

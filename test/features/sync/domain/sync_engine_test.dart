@@ -115,6 +115,12 @@ class _FakeFirestoreRemoteDataSource implements FirestoreRemoteDataSource {
   Stream<List<Map<String, dynamic>>> watchAssignments(String incidentId) => const Stream.empty();
 
   @override
+  Future<void> pushUserProfile(Map<String, dynamic> userData) async {}
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchUsers() => const Stream.empty();
+
+  @override
   Future<void> deleteIncident(String incidentId) async {
     deletedIncidentIds.add(incidentId);
   }
